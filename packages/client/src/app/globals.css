@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+:root {
+  --board-bg: #dbb87a;
+  --board-line: #7a5c2e;
+  --cell-size: 52px;
+  --piece-font-size: 24px;
+}
+
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Meiryo", sans-serif;
+}

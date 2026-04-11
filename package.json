@@ -1,0 +1,23 @@
+{
+  "name": "shogi24-revival",
+  "private": true,
+  "workspaces": [
+    "packages/engine",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "build": "npm run build:engine && npm run build:client",
+    "build:engine": "cd packages/engine && npm run build",
+    "build:client": "cd packages/client && npx next build",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd packages/server && npx tsx src/index.ts",
+    "dev:client": "cd packages/client && npx next dev --port 3024",
+    "start": "concurrently \"npm run start:server\" \"npm run start:client\"",
+    "start:server": "cd packages/server && npx tsx src/index.ts",
+    "start:client": "cd packages/client && npx next start --port 3024"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
