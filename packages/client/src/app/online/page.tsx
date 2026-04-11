@@ -1,16 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import { OnlineGame } from "@/components/OnlineGame";
 import { LobbyTable } from "@/components/LobbyTable";
+import { ReviewMode } from "@/components/ReviewMode";
+
+const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3025";
 
 export default function OnlinePage() {
+  // URLからtokenパラメータを取得してlocalStorageに保存
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      localStorage.setItem('shogi24_token', token);
+      // URLからtokenを除去
+      window.history.replaceState({}, '', '/online');
+    }
+  }, []);
   const {
-    connected, loggedIn, myId, waiting,
-    lobbyPlayers, challenges, match,
+    connected, loggedIn, myId, handle, waiting,
+    lobbyPlayers, challenges, match, chatMessages,
     login, sendChallenge, acceptChallenge, declineChallenge,
-    sendMove, sendResign, backToLobby, setLobbyStatus, setPreferredTime,
+    sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
+    reviewMode, reviewMyBoard, reviewOpponentBoard,
+    enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,
   } = useSocket();
 
   const [inputHandle, setInputHandle] = useState("");
@@ -19,6 +34,37 @@ export default function OnlinePage() {
 
   // --- 対局中 ---
   if (match) {
+    // 感想戦モード
+    if (reviewMode && match.result) {
+      return (
+        <main style={{
+          flex: 1, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          padding: 24, gap: 16, minHeight: "100vh",
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+            <h1 style={{ fontSize: 22, fontWeight: "bold" }}>将棋倶楽部24 Revival</h1>
+            <span style={{ fontSize: 13, color: "#78716c" }}>感想戦</span>
+          </div>
+          <ReviewMode
+            myColor={match.myColor}
+            myBoard={reviewMyBoard}
+            opponentBoard={reviewOpponentBoard}
+            onReviewMove={sendReviewMove}
+            onUndo={reviewUndo}
+            onReset={reviewReset}
+            onLeave={leaveReview}
+            onBackToLobby={backToLobby}
+            chatMessages={chatMessages}
+            onSendChat={sendChat}
+            myHandle={handle}
+            blackHandle={match.blackPlayer.handle}
+            whiteHandle={match.whitePlayer.handle}
+          />
+        </main>
+      );
+    }
+
     if (match.game) {
       return (
         <main style={{
@@ -30,18 +76,30 @@ export default function OnlinePage() {
             <h1 style={{ fontSize: 22, fontWeight: "bold" }}>将棋倶楽部24 Revival</h1>
             <span style={{ fontSize: 13, color: "#78716c" }}>オンライン対局</span>
           </div>
-          <OnlineGame match={match} onMove={sendMove} onResign={sendResign} />
+          <OnlineGame match={match} onMove={sendMove} onResign={sendResign} chatMessages={chatMessages} onSendChat={sendChat} myHandle={handle} />
           {match.result && (
-            <button
-              onClick={backToLobby}
-              style={{
-                marginTop: 8, padding: "10px 24px", fontSize: 15, fontWeight: "bold",
-                backgroundColor: "#44403c", color: "white",
-                borderRadius: 8, border: "none", cursor: "pointer",
-              }}
-            >
-              ロビーに戻る
-            </button>
+            <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+              <button
+                onClick={enterReview}
+                style={{
+                  padding: "10px 24px", fontSize: 15, fontWeight: "bold",
+                  backgroundColor: "#d97706", color: "white",
+                  borderRadius: 8, border: "none", cursor: "pointer",
+                }}
+              >
+                感想戦
+              </button>
+              <button
+                onClick={backToLobby}
+                style={{
+                  padding: "10px 24px", fontSize: 15, fontWeight: "bold",
+                  backgroundColor: "#44403c", color: "white",
+                  borderRadius: 8, border: "none", cursor: "pointer",
+                }}
+              >
+                ロビーに戻る
+              </button>
+            </div>
           )}
         </main>
       );
@@ -108,6 +166,25 @@ export default function OnlinePage() {
             入場
           </button>
           {loginError && <p style={{ color: "#dc2626", fontSize: 13 }}>{loginError}</p>}
+        </div>
+        <div style={{
+          display: "flex", flexDirection: "column", gap: 8, alignItems: "center",
+          padding: "16px 32px", backgroundColor: "#f0f9ff", borderRadius: 12,
+          border: "1px solid #bae6fd", minWidth: 320,
+        }}>
+          <p style={{ fontSize: 13, color: "#57534e" }}>レーティングを保存するなら</p>
+          <button
+            onClick={() => { window.location.href = `${SERVER_URL}/auth/google`; }}
+            disabled={!connected}
+            style={{
+              padding: "10px 24px", fontSize: 15, fontWeight: "bold",
+              backgroundColor: "#4285f4", color: "white",
+              borderRadius: 8, border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 8,
+            }}
+          >
+            Googleでログイン
+          </button>
         </div>
         <a href="/" style={{ fontSize: 13, color: "#78716c", textDecoration: "underline" }}>
           ローカル対局はこちら

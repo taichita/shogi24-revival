@@ -2,7 +2,8 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
-import type { Color, Move, GameState, GameResult } from "@shogi24/engine";
+import type { Color, Move, GameState, GameResult, Pos } from "@shogi24/engine";
+import type { ChatMessage } from "@/components/ChatPanel";
 import { makeMove as engineMakeMove } from "@shogi24/engine";
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3025";
@@ -53,6 +54,7 @@ export interface UseSocketReturn {
   lobbyPlayers: LobbyPlayer[];
   challenges: IncomingChallenge[];
   match: OnlineMatchState | null;
+  chatMessages: ChatMessage[];
   login: (handle: string) => Promise<boolean>;
   quickstart: (timePreset?: string) => Promise<void>;
   sendChallenge: (targetId: string, timePreset: string) => Promise<string | null>;
@@ -60,9 +62,19 @@ export interface UseSocketReturn {
   declineChallenge: (challengeId: string) => void;
   sendMove: (move: Move) => void;
   sendResign: () => void;
+  sendChat: (message: string) => void;
   backToLobby: () => void;
   setLobbyStatus: (status: 'idle' | 'resting' | 'automatch') => void;
   setPreferredTime: (preset: string) => void;
+  // 感想戦
+  reviewMode: boolean;
+  reviewMyBoard: GameState | null;
+  reviewOpponentBoard: GameState | null;
+  enterReview: () => void;
+  sendReviewMove: (move: Move) => void;
+  reviewUndo: () => void;
+  reviewReset: (position: 'initial' | 'final') => void;
+  leaveReview: () => void;
 }
 
 export function useSocket(): UseSocketReturn {
@@ -75,9 +87,18 @@ export function useSocket(): UseSocketReturn {
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [challenges, setChallenges] = useState<IncomingChallenge[]>([]);
   const [match, setMatch] = useState<OnlineMatchState | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [reviewMyBoard, setReviewMyBoard] = useState<GameState | null>(null);
+  const [reviewOpponentBoard, setReviewOpponentBoard] = useState<GameState | null>(null);
 
   useEffect(() => {
-    const socket = io(SERVER_URL, { autoConnect: true });
+    // localStorageからJWTを取得して接続時に送信
+    const storedToken = typeof window !== 'undefined' ? localStorage.getItem('shogi24_token') : null;
+    const socket = io(SERVER_URL, {
+      autoConnect: true,
+      auth: storedToken ? { token: storedToken } : undefined,
+    });
     socketRef.current = socket;
 
     socket.on("connect", () => {
@@ -88,6 +109,12 @@ export function useSocket(): UseSocketReturn {
       setConnected(false);
       setLoggedIn(false);
       setMyId(null);
+    });
+
+    // JWT自動認証の復元
+    socket.on("auth.restored", (data: { handle: string; rating: number; userId: string }) => {
+      setLoggedIn(true);
+      setHandle(data.handle);
     });
 
     // --- ロビー ---
@@ -146,6 +173,41 @@ export function useSocket(): UseSocketReturn {
 
     socket.on("match.error", (data) => {
       setMatch((prev) => prev ? { ...prev, error: data.message } : prev);
+    });
+
+    socket.on("chat.message", (data: { matchId: string; sender: string; message: string; timestamp: number }) => {
+      setChatMessages((prev) => [...prev, { sender: data.sender, message: data.message, timestamp: data.timestamp }]);
+    });
+
+    // --- 感想戦 ---
+    socket.on("review.entered", (data: { matchId: string; board: GameState }) => {
+      setReviewMode(true);
+      setReviewMyBoard(data.board);
+    });
+
+    socket.on("review.snapshot", (data: { matchId: string; color: Color; board: GameState }) => {
+      // 自分の色か相手の色かで振り分け
+      setMatch((prev) => {
+        if (!prev) return prev;
+        const myColor = prev.myColor;
+        if (data.color === myColor) {
+          setReviewMyBoard(data.board);
+        } else {
+          setReviewOpponentBoard(data.board);
+        }
+        return prev;
+      });
+    });
+
+    socket.on("review.left", (data: { matchId: string; color: Color }) => {
+      // 相手が離脱したら相手盤をクリア
+      setMatch((prev) => {
+        if (!prev) return prev;
+        if (data.color !== prev.myColor) {
+          setReviewOpponentBoard(null);
+        }
+        return prev;
+      });
     });
 
     return () => { socket.disconnect(); };
@@ -209,10 +271,56 @@ export function useSocket(): UseSocketReturn {
     socket.emit("match.resign", { matchId: match.matchId });
   }, [match]);
 
+  const sendChat = useCallback((message: string) => {
+    const socket = socketRef.current;
+    if (!socket || !match) return;
+    socket.emit("chat.send", { matchId: match.matchId, message });
+  }, [match]);
+
+  const enterReview = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket || !match) return;
+    socket.emit("review.enter", { matchId: match.matchId });
+  }, [match]);
+
+  const sendReviewMove = useCallback((move: Move) => {
+    const socket = socketRef.current;
+    if (!socket || !match) return;
+    socket.emit("review.move", { matchId: match.matchId, move });
+  }, [match]);
+
+  const reviewUndo = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket || !match) return;
+    socket.emit("review.undo", { matchId: match.matchId });
+  }, [match]);
+
+  const reviewReset = useCallback((position: 'initial' | 'final') => {
+    const socket = socketRef.current;
+    if (!socket || !match) return;
+    socket.emit("review.reset", { matchId: match.matchId, position });
+  }, [match]);
+
+  const leaveReview = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket || !match) return;
+    socket.emit("review.leave", { matchId: match.matchId });
+    setReviewMode(false);
+    setReviewMyBoard(null);
+    setReviewOpponentBoard(null);
+  }, [match]);
+
   const backToLobby = useCallback(() => {
+    if (reviewMode && match) {
+      socketRef.current?.emit("review.leave", { matchId: match.matchId });
+    }
     setMatch(null);
     setWaiting(false);
-  }, []);
+    setChatMessages([]);
+    setReviewMode(false);
+    setReviewMyBoard(null);
+    setReviewOpponentBoard(null);
+  }, [reviewMode, match]);
 
   const setLobbyStatus = useCallback((status: 'idle' | 'resting' | 'automatch') => {
     socketRef.current?.emit("lobby.setStatus", { status });
@@ -226,8 +334,10 @@ export function useSocket(): UseSocketReturn {
 
   return {
     connected, loggedIn, myId, handle, waiting,
-    lobbyPlayers, challenges, match,
+    lobbyPlayers, challenges, match, chatMessages,
     login, quickstart, sendChallenge, acceptChallenge, declineChallenge,
-    sendMove, sendResign, backToLobby, setLobbyStatus, setPreferredTime,
+    sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
+    reviewMode, reviewMyBoard, reviewOpponentBoard,
+    enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,
   };
 }

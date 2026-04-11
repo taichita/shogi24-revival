@@ -7,11 +7,12 @@ import {
   type ClientToServerEvents, type ServerToClientEvents,
   type InterServerEvents, type SocketData, type Player,
 } from './types.js';
-import { opponent, apply24Rating } from '@shogi24/engine';
+import { opponent, apply24Rating, createGame, makeMove as engineMakeMove } from '@shogi24/engine';
 import { MatchManager } from './match-manager.js';
 import { MatchQueue } from './queue.js';
 import { Lobby } from './lobby.js';
-import { initDb, loginOrCreate, updateRating, saveMatch } from './db.js';
+import { initDb, loginOrCreate, updateRating, saveMatch, getUserById } from './db.js';
+import { authRouter, verifyToken } from './auth.js';
 
 const PORT = Number(process.env.PORT ?? 3025);
 
@@ -21,6 +22,7 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
 
 const app = express();
 app.use(cors({ origin: ALLOWED_ORIGINS }));
+app.use('/auth', authRouter);
 const httpServer = createServer(app);
 
 const io = new Server<
@@ -199,17 +201,19 @@ function handleMatchEnd(matchId: string, result: { winner: string | null; reason
       if (wp) wp.rating = rr.nextWinner;
       if (lp) lp.rating = rr.nextLoser;
 
-      // DB永続化
-      updateRating(winnerId, rr.nextWinner, true);
-      updateRating(loserId, rr.nextLoser, false);
+      // DB永続化 (persistent userId を使用)
+      const winnerUserId = winnerIsBlack ? room.black.userId : room.white.userId;
+      const loserUserId = winnerIsBlack ? room.white.userId : room.black.userId;
+      updateRating(winnerUserId, rr.nextWinner, true);
+      updateRating(loserUserId, rr.nextLoser, false);
 
       console.log(`[rating] ${winnerIsBlack ? room.black.handle : room.white.handle} ${winnerR}→${rr.nextWinner} (+${rr.exchanged}), ${winnerIsBlack ? room.white.handle : room.black.handle} ${loserR}→${rr.nextLoser} (-${rr.exchanged})`);
 
       // 対局記録保存
       saveMatch({
         id: matchId,
-        blackId: room.black.id, whiteId: room.white.id,
-        winnerId, result: result.reason,
+        blackId: room.black.userId, whiteId: room.white.userId,
+        winnerId: winnerUserId, result: result.reason,
         blackRating: room.black.rating, whiteRating: room.white.rating,
         ratingDelta: rr.exchanged, timePreset: room.timePreset.name,
         moves: room.game.moveCount,
@@ -229,7 +233,26 @@ function handleMatchEnd(matchId: string, result: { winner: string | null; reason
 io.on('connection', (socket) => {
   console.log(`[connect] ${socket.id}`);
 
-  // --- 認証 ---
+  // --- JWT自動認証 ---
+  const token = socket.handshake.auth?.token as string | undefined;
+  if (token) {
+    const dbUser = verifyToken(token);
+    if (dbUser) {
+      const player: Player = {
+        id: socket.id,
+        userId: dbUser.id,
+        handle: dbUser.handle,
+        rating: dbUser.rating,
+      };
+      socket.data.player = player;
+      lobby.join(player);
+      socket.emit('auth.restored', { handle: dbUser.handle, rating: dbUser.rating, userId: dbUser.id });
+      console.log(`[jwt-login] ${player.handle} (${socket.id})`);
+      broadcastLobby();
+    }
+  }
+
+  // --- ハンドル認証（レガシー / Google未使用時） ---
   socket.on('auth.login', ({ handle }, cb) => {
     if (!checkRateLimit(socket.id, 3)) {
       cb({ ok: false, error: 'リクエストが多すぎます' });
@@ -248,6 +271,7 @@ io.on('connection', (socket) => {
     const dbUser = loginOrCreate(socket.id, cleanHandle);
     const player: Player = {
       id: socket.id,
+      userId: dbUser.id,
       handle: dbUser.handle,
       rating: dbUser.rating,
     };
@@ -375,6 +399,24 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- チャット ---
+  socket.on('chat.send', ({ matchId, message }) => {
+    if (!checkRateLimit(socket.id, 2)) return;
+    const player = socket.data.player;
+    if (!player) return;
+    const room = matchManager.getMatch(matchId);
+    if (!room) return;
+    if (room.black.id !== socket.id && room.white.id !== socket.id) return;
+    const clean = sanitize(message).slice(0, 200);
+    if (clean.length === 0) return;
+    io.to(matchId).emit('chat.message', {
+      matchId,
+      sender: player.handle,
+      message: clean,
+      timestamp: Date.now(),
+    });
+  });
+
   // --- 投了 ---
   socket.on('match.resign', ({ matchId }) => {
     const result = matchManager.resign(matchId, socket.id);
@@ -384,6 +426,104 @@ io.on('connection', (socket) => {
       io.to(matchId).emit('match.result', { matchId, result, clock });
       handleMatchEnd(matchId, result);
     }
+  });
+
+  // --- 感想戦 ---
+  socket.on('review.enter', ({ matchId }) => {
+    const room = matchManager.getMatch(matchId);
+    if (!room || !room.game.result) return;
+    const player = socket.data.player;
+    if (!player) return;
+    const isBlack = room.black.id === socket.id;
+    const isWhite = room.white.id === socket.id;
+    if (!isBlack && !isWhite) return;
+
+    if (!room.review) {
+      room.review = {
+        blackBoard: JSON.parse(JSON.stringify(room.game)),
+        whiteBoard: JSON.parse(JSON.stringify(room.game)),
+        blackHistory: [],
+        whiteHistory: [],
+        blackActive: false,
+        whiteActive: false,
+        finalGame: JSON.parse(JSON.stringify(room.game)),
+      };
+    }
+    if (isBlack) room.review.blackActive = true;
+    if (isWhite) room.review.whiteActive = true;
+
+    const myBoard = isBlack ? room.review.blackBoard : room.review.whiteBoard;
+    socket.emit('review.entered', { matchId, board: myBoard });
+    console.log(`[review] ${player.handle} entered review for ${matchId}`);
+  });
+
+  socket.on('review.move', ({ matchId, move }) => {
+    const room = matchManager.getMatch(matchId);
+    if (!room?.review) return;
+    const isBlack = room.black.id === socket.id;
+    const isWhite = room.white.id === socket.id;
+    if (!isBlack && !isWhite) return;
+
+    const color = isBlack ? 'black' : 'white';
+    const board = isBlack ? room.review.blackBoard : room.review.whiteBoard;
+    const history = isBlack ? room.review.blackHistory : room.review.whiteHistory;
+
+    try {
+      const newBoard = engineMakeMove(board, move);
+      history.push(board);
+      if (isBlack) room.review.blackBoard = newBoard;
+      else room.review.whiteBoard = newBoard;
+      io.to(matchId).emit('review.snapshot', { matchId, color, board: newBoard });
+    } catch {
+      // 不正な手は無視
+    }
+  });
+
+  socket.on('review.undo', ({ matchId }) => {
+    const room = matchManager.getMatch(matchId);
+    if (!room?.review) return;
+    const isBlack = room.black.id === socket.id;
+    const isWhite = room.white.id === socket.id;
+    if (!isBlack && !isWhite) return;
+
+    const color = isBlack ? 'black' : 'white';
+    const history = isBlack ? room.review.blackHistory : room.review.whiteHistory;
+    const prev = history.pop();
+    if (!prev) return;
+
+    if (isBlack) room.review.blackBoard = prev;
+    else room.review.whiteBoard = prev;
+    io.to(matchId).emit('review.snapshot', { matchId, color, board: prev });
+  });
+
+  socket.on('review.reset', ({ matchId, position }) => {
+    const room = matchManager.getMatch(matchId);
+    if (!room?.review) return;
+    const isBlack = room.black.id === socket.id;
+    const isWhite = room.white.id === socket.id;
+    if (!isBlack && !isWhite) return;
+
+    const color = isBlack ? 'black' : 'white';
+    const resetBoard = position === 'initial'
+      ? createGame()
+      : JSON.parse(JSON.stringify(room.review.finalGame));
+
+    if (isBlack) { room.review.blackBoard = resetBoard; room.review.blackHistory = []; }
+    else { room.review.whiteBoard = resetBoard; room.review.whiteHistory = []; }
+    io.to(matchId).emit('review.snapshot', { matchId, color, board: resetBoard });
+  });
+
+  socket.on('review.leave', ({ matchId }) => {
+    const room = matchManager.getMatch(matchId);
+    if (!room?.review) return;
+    const isBlack = room.black.id === socket.id;
+    const isWhite = room.white.id === socket.id;
+    if (!isBlack && !isWhite) return;
+
+    const color = isBlack ? 'black' : 'white';
+    if (isBlack) room.review.blackActive = false;
+    if (isWhite) room.review.whiteActive = false;
+    io.to(matchId).emit('review.left', { matchId, color });
   });
 
   // --- 切断 ---

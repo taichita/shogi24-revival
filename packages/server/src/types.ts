@@ -24,8 +24,20 @@ export interface ClockState {
 /** サーバー上のプレイヤー */
 export interface Player {
   id: string;        // socket.id
+  userId: string;    // persistent DB id (UUID or socket.id for legacy)
   handle: string;
   rating: number;
+}
+
+/** 感想戦のボード状態 */
+export interface ReviewState {
+  blackBoard: GameState;
+  whiteBoard: GameState;
+  blackHistory: GameState[];  // undo用
+  whiteHistory: GameState[];
+  blackActive: boolean;
+  whiteActive: boolean;
+  finalGame: GameState;  // 対局終了時の盤面（リセット用）
 }
 
 /** サーバー上の対局 */
@@ -38,6 +50,7 @@ export interface MatchRoom {
   timePreset: TimePreset;
   lastMoveTime: number;  // Date.now()
   tickTimer?: ReturnType<typeof setInterval>;
+  review?: ReviewState;
 }
 
 // ============================================================
@@ -55,6 +68,12 @@ export interface ClientToServerEvents {
   'lobby.challenge': (data: { targetId: string; timePreset: string }, cb: (res: { ok: boolean; challengeId?: string; error?: string }) => void) => void;
   'lobby.challenge.accept': (data: { challengeId: string }) => void;
   'lobby.challenge.decline': (data: { challengeId: string }) => void;
+  'chat.send': (data: { matchId: string; message: string }) => void;
+  'review.enter': (data: { matchId: string }) => void;
+  'review.move': (data: { matchId: string; move: Move }) => void;
+  'review.undo': (data: { matchId: string }) => void;
+  'review.reset': (data: { matchId: string; position: 'initial' | 'final' }) => void;
+  'review.leave': (data: { matchId: string }) => void;
 }
 
 /** サーバー → クライアント */
@@ -92,6 +111,11 @@ export interface ServerToClientEvents {
   'lobby.playerLeft': (data: { playerId: string }) => void;
   'lobby.challenge.received': (data: { challengeId: string; from: { handle: string; rating: number }; timePreset: string }) => void;
   'lobby.challenge.declined': (data: { challengeId: string }) => void;
+  'chat.message': (data: { matchId: string; sender: string; message: string; timestamp: number }) => void;
+  'auth.restored': (data: { handle: string; rating: number; userId: string }) => void;
+  'review.entered': (data: { matchId: string; board: GameState }) => void;
+  'review.snapshot': (data: { matchId: string; color: Color; board: GameState }) => void;
+  'review.left': (data: { matchId: string; color: Color }) => void;
 }
 
 export interface LobbyPlayerInfo {

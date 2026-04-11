@@ -11,6 +11,7 @@ import { ShogiBoard } from "./ShogiBoard";
 import { HandPieces } from "./HandPieces";
 import { PromotionDialog } from "./PromotionDialog";
 import { MoveList } from "./MoveList";
+import { ChatPanel, type ChatMessage } from "./ChatPanel";
 import { playMoveSound, playBeep } from "@/lib/sounds";
 
 type SelectionState =
@@ -24,6 +25,9 @@ interface Props {
   match: OnlineMatchState;
   onMove: (move: Move) => void;
   onResign: () => void;
+  chatMessages: ChatMessage[];
+  onSendChat: (message: string) => void;
+  myHandle: string | null;
 }
 
 const BOARD_W = 9 * 44 + 4;
@@ -35,10 +39,9 @@ function formatTime(ms: number): string {
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
-export function OnlineGame({ match, onMove, onResign }: Props) {
+export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, myHandle }: Props) {
   const [selection, setSelection] = useState<SelectionState>({ type: "none" });
   const [promotionPending, setPromotionPending] = useState<PromotionChoice | null>(null);
-  const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const [flipped, setFlipped] = useState(match.myColor === "white");
   const prevMoveCount = useRef(0);
 
@@ -88,10 +91,17 @@ export function OnlineGame({ match, onMove, onResign }: Props) {
     return `${turnLabel} の手番`;
   }, [game, match]);
 
+  // game.moves から全手の棋譜を生成
+  const moveHistory = useMemo(() => {
+    if (!game) return [];
+    return game.moves.map((m, i) => {
+      const color: Color = i % 2 === 0 ? "black" : "white";
+      return `${i + 1}. ${moveToJapanese(m, color)}`;
+    });
+  }, [game?.moves.length]);
+
   const executeMove = useCallback((move: Move) => {
     if (!game) return;
-    const label = `${game.moveCount + 1}. ${moveToJapanese(move, game.turn)}`;
-    setMoveHistory((h) => [...h, label]);
     onMove(move);
     setSelection({ type: "none" });
     setPromotionPending(null);
@@ -187,9 +197,10 @@ export function OnlineGame({ match, onMove, onResign }: Props) {
           />
         </div>
 
-        {/* 右: 棋譜+ボタン */}
+        {/* 右: 棋譜+チャット+ボタン */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, height: 500 }}>
           <MoveList moves={moveHistory} />
+          <ChatPanel messages={chatMessages} onSend={onSendChat} myHandle={myHandle} />
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <button
               onClick={() => setFlipped((f) => !f)}

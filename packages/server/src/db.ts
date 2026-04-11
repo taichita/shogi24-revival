@@ -2,6 +2,7 @@ import initSqlJs, { Database as SqlJsDb } from 'sql.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
@@ -24,11 +25,14 @@ export async function initDb(): Promise<void> {
 
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
-      id         TEXT PRIMARY KEY,
-      handle     TEXT NOT NULL UNIQUE,
-      rating     INTEGER NOT NULL DEFAULT 1500,
-      games      INTEGER NOT NULL DEFAULT 0,
-      wins       INTEGER NOT NULL DEFAULT 0
+      id           TEXT PRIMARY KEY,
+      handle       TEXT NOT NULL UNIQUE,
+      google_id    TEXT UNIQUE,
+      display_name TEXT,
+      avatar_url   TEXT,
+      rating       INTEGER NOT NULL DEFAULT 1500,
+      games        INTEGER NOT NULL DEFAULT 0,
+      wins         INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS matches (
       id           TEXT PRIMARY KEY,
@@ -44,6 +48,11 @@ export async function initDb(): Promise<void> {
       created_at   TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // マイグレーション: 既存DBにカラムがなければ追加
+  try { db.run('ALTER TABLE users ADD COLUMN google_id TEXT UNIQUE'); } catch {}
+  try { db.run('ALTER TABLE users ADD COLUMN display_name TEXT'); } catch {}
+  try { db.run('ALTER TABLE users ADD COLUMN avatar_url TEXT'); } catch {}
 
   save();
   console.log('[db] initialized');
@@ -62,6 +71,9 @@ function save(): void {
 export interface DbUser {
   id: string;
   handle: string;
+  googleId?: string;
+  displayName?: string;
+  avatarUrl?: string;
   rating: number;
   games: number;
   wins: number;
@@ -94,6 +106,47 @@ export function getUserByHandle(handle: string): DbUser | undefined {
   if (rows.length === 0 || rows[0].values.length === 0) return undefined;
   const r = rows[0].values[0];
   return { id: r[0] as string, handle: r[1] as string, rating: r[2] as number, games: r[3] as number, wins: r[4] as number };
+}
+
+/** Google IDでユーザーを検索・作成 */
+export function findOrCreateGoogleUser(googleId: string, displayName: string, avatarUrl?: string): DbUser {
+  const rows = db.exec('SELECT * FROM users WHERE google_id = ?', [googleId]);
+  if (rows.length > 0 && rows[0].values.length > 0) {
+    const r = rows[0].values[0];
+    // display_name / avatar を更新
+    db.run('UPDATE users SET display_name = ?, avatar_url = ? WHERE google_id = ?', [displayName, avatarUrl ?? null, googleId]);
+    save();
+    return {
+      id: r[0] as string, handle: r[1] as string, googleId: r[2] as string,
+      displayName: r[3] as string, avatarUrl: r[4] as string,
+      rating: r[5] as number, games: r[6] as number, wins: r[7] as number,
+    };
+  }
+  // 新規作成: handleはdisplayName（重複時はランダムサフィックス付与）
+  let handle = displayName.slice(0, 20);
+  const existing = db.exec('SELECT id FROM users WHERE handle = ?', [handle]);
+  if (existing.length > 0 && existing[0].values.length > 0) {
+    handle = `${handle.slice(0, 16)}_${Math.random().toString(36).slice(2, 6)}`;
+  }
+  const id = randomUUID();
+  db.run(
+    'INSERT INTO users (id, handle, google_id, display_name, avatar_url, rating, games, wins) VALUES (?, ?, ?, ?, ?, 1500, 0, 0)',
+    [id, handle, googleId, displayName, avatarUrl ?? null],
+  );
+  save();
+  return { id, handle, googleId, displayName, avatarUrl, rating: 1500, games: 0, wins: 0 };
+}
+
+/** IDでユーザー取得 */
+export function getUserById(userId: string): DbUser | undefined {
+  const rows = db.exec('SELECT * FROM users WHERE id = ?', [userId]);
+  if (rows.length === 0 || rows[0].values.length === 0) return undefined;
+  const r = rows[0].values[0];
+  return {
+    id: r[0] as string, handle: r[1] as string, googleId: r[2] as string | undefined,
+    displayName: r[3] as string | undefined, avatarUrl: r[4] as string | undefined,
+    rating: r[5] as number, games: r[6] as number, wins: r[7] as number,
+  };
 }
 
 // ============================================================
