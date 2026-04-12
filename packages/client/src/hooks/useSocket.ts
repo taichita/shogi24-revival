@@ -55,6 +55,7 @@ export interface UseSocketReturn {
   waiting: boolean;
   lobbyPlayers: LobbyPlayer[];
   challenges: IncomingChallenge[];
+  sentChallenges: string[];
   match: OnlineMatchState | null;
   chatMessages: ChatMessage[];
   login: (handle: string) => Promise<boolean>;
@@ -63,6 +64,7 @@ export interface UseSocketReturn {
   sendChallenge: (targetId: string, timePreset: string) => Promise<string | null>;
   acceptChallenge: (challengeId: string) => void;
   declineChallenge: (challengeId: string) => void;
+  cancelChallenge: (challengeId: string) => void;
   sendMove: (move: Move) => void;
   sendResign: () => void;
   sendChat: (message: string) => void;
@@ -90,6 +92,7 @@ export function useSocket(): UseSocketReturn {
   const [waiting, setWaiting] = useState(false);
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [challenges, setChallenges] = useState<IncomingChallenge[]>([]);
+  const [sentChallenges, setSentChallenges] = useState<string[]>([]);
   const [match, setMatch] = useState<OnlineMatchState | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [reviewMode, setReviewMode] = useState(false);
@@ -145,12 +148,14 @@ export function useSocket(): UseSocketReturn {
 
     socket.on("lobby.challenge.declined", (data: { challengeId: string }) => {
       setChallenges((prev) => prev.filter((c) => c.challengeId !== data.challengeId));
+      setSentChallenges((prev) => prev.filter((id) => id !== data.challengeId));
     });
 
     // --- 対局 ---
     socket.on("match.started", (data) => {
       setWaiting(false);
       setChallenges([]);
+      setSentChallenges([]);
       setMatch({
         matchId: data.matchId,
         myColor: data.yourColor,
@@ -278,6 +283,9 @@ export function useSocket(): UseSocketReturn {
     if (!socket) return "接続されていません";
     return new Promise((resolve) => {
       socket.emit("lobby.challenge", { targetId, timePreset }, (res: { ok: boolean; challengeId?: string; error?: string }) => {
+        if (res.ok && res.challengeId) {
+          setSentChallenges((prev) => [...prev, res.challengeId!]);
+        }
         resolve(res.ok ? null : (res.error ?? "挑戦に失敗しました"));
       });
     });
@@ -291,6 +299,11 @@ export function useSocket(): UseSocketReturn {
   const declineChallenge = useCallback((challengeId: string) => {
     socketRef.current?.emit("lobby.challenge.decline", { challengeId });
     setChallenges((prev) => prev.filter((c) => c.challengeId !== challengeId));
+  }, []);
+
+  const cancelChallenge = useCallback((challengeId: string) => {
+    socketRef.current?.emit("lobby.challenge.cancel", { challengeId });
+    setSentChallenges((prev) => prev.filter((id) => id !== challengeId));
   }, []);
 
   const sendMove = useCallback((move: Move) => {
@@ -368,8 +381,8 @@ export function useSocket(): UseSocketReturn {
 
   return {
     connected, loggedIn, needsHandle, kickedMessage, myId, handle, waiting,
-    lobbyPlayers, challenges, match, chatMessages,
-    login, setHandleName, quickstart, sendChallenge, acceptChallenge, declineChallenge,
+    lobbyPlayers, challenges, sentChallenges, match, chatMessages,
+    login, setHandleName, quickstart, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge,
     sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
     enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,

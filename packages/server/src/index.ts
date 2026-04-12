@@ -459,6 +459,19 @@ io.on('connection', (socket) => {
     console.log(`[challenge declined] ${ch.to.handle} declined ${ch.from.handle}`);
   });
 
+  // --- 挑戦キャンセル（送った側から取り消し） ---
+  socket.on('lobby.challenge.cancel', ({ challengeId }) => {
+    const ch = lobby.getChallenge(challengeId);
+    if (!ch) return;
+    if (ch.from.id !== socket.id) return; // 送った本人のみキャンセル可
+    lobby.removeChallenge(challengeId);
+
+    // 相手側の挑戦通知を消す
+    const toSocket = io.sockets.sockets.get(ch.to.id);
+    toSocket?.emit('lobby.challenge.declined', { challengeId });
+    console.log(`[challenge cancelled] ${ch.from.handle} cancelled challenge to ${ch.to.handle}`);
+  });
+
   // --- 着手 ---
   socket.on('match.move', ({ matchId, move }) => {
     const result = matchManager.applyMove(matchId, socket.id, move);

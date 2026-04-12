@@ -12,7 +12,7 @@ import { HandPieces } from "./HandPieces";
 import { PromotionDialog } from "./PromotionDialog";
 import { MoveList } from "./MoveList";
 import { LobbySidebar } from "./LobbySidebar";
-import { playMoveSound, playBeep } from "@/lib/sounds";
+import { playMoveSound, playBeep, playEndSound } from "@/lib/sounds";
 
 type SelectionState =
   | { type: "none" }
@@ -44,7 +44,9 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
   const [promotionPending, setPromotionPending] = useState<PromotionChoice | null>(null);
   const [flipped, setFlipped] = useState(match.myColor === "white");
   const [chatInput, setChatInput] = useState("");
+  const [showEndEffect, setShowEndEffect] = useState(false);
   const prevMoveCount = useRef(0);
+  const prevResult = useRef<boolean>(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const game = match.game;
@@ -70,6 +72,16 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
     else if (remainSec <= 10) playBeep(false);
     else if (remainSec % 10 === 0 && remainSec > 0) playBeep(false);
   }, [match.clock, isMyTurn, myColor, game, match.result]);
+
+  // 対局終了エフェクト
+  useEffect(() => {
+    if (match.result && !prevResult.current) {
+      prevResult.current = true;
+      playEndSound();
+      setShowEndEffect(true);
+      setTimeout(() => setShowEndEffect(false), 2000);
+    }
+  }, [match.result]);
 
   // チャット自動スクロール
   useEffect(() => {
@@ -165,7 +177,19 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
       {/* ステータス */}
-      <div style={{ fontSize: 15, fontWeight: "bold", textAlign: "center" }}>{status}</div>
+      <div style={{
+        fontSize: 15, fontWeight: "bold", textAlign: "center",
+        ...(showEndEffect ? {
+          fontSize: 20,
+          padding: "8px 24px",
+          backgroundColor: "#fef3c7",
+          border: "2px solid #d97706",
+          borderRadius: 10,
+          animation: "pulse 0.5s ease-in-out 3",
+        } : {}),
+      }}>
+        {status}
+      </div>
 
       {/* メインエリア: 棋譜 | 持ち駒+盤面+持ち駒 | ロビー */}
       <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "stretch" }}>

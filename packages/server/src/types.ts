@@ -69,6 +69,7 @@ export interface ClientToServerEvents {
   'lobby.challenge': (data: { targetId: string; timePreset: string }, cb: (res: { ok: boolean; challengeId?: string; error?: string }) => void) => void;
   'lobby.challenge.accept': (data: { challengeId: string }) => void;
   'lobby.challenge.decline': (data: { challengeId: string }) => void;
+  'lobby.challenge.cancel': (data: { challengeId: string }) => void;
   'chat.send': (data: { matchId: string; message: string }) => void;
   'review.enter': (data: { matchId: string }) => void;
   'review.move': (data: { matchId: string; move: Move }) => void;

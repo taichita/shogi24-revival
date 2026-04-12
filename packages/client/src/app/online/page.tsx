@@ -21,8 +21,8 @@ export default function OnlinePage() {
   }, []);
   const {
     connected, loggedIn, needsHandle, kickedMessage, myId, handle, waiting,
-    lobbyPlayers, challenges, match, chatMessages,
-    login, setHandleName, sendChallenge, acceptChallenge, declineChallenge,
+    lobbyPlayers, challenges, sentChallenges, match, chatMessages,
+    login, setHandleName, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge,
     sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
     enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,
@@ -288,6 +288,7 @@ export default function OnlinePage() {
         players={lobbyPlayers}
         myId={myId}
         challenges={challenges}
+        sentChallenges={sentChallenges}
         onChallenge={async (targetId, timePreset) => {
           const err = await sendChallenge(targetId, timePreset);
           setChallengeMsg(err ?? "挑戦を送りました");
@@ -295,6 +296,7 @@ export default function OnlinePage() {
         }}
         onAccept={acceptChallenge}
         onDecline={declineChallenge}
+        onCancel={cancelChallenge}
         onSetStatus={setLobbyStatus}
         onSetTime={setPreferredTime}
         waiting={waiting}

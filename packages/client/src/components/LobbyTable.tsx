@@ -27,16 +27,18 @@ interface Props {
   players: LobbyPlayer[];
   myId: string | null;
   challenges: IncomingChallenge[];
+  sentChallenges: string[];
   onChallenge: (targetId: string, timePreset: string) => void;
   onAccept: (challengeId: string) => void;
   onDecline: (challengeId: string) => void;
+  onCancel: (challengeId: string) => void;
   onSetStatus: (status: "idle" | "resting" | "automatch") => void;
   onSetTime: (preset: string) => void;
   waiting: boolean;
 }
 
 export function LobbyTable({
-  players, myId, challenges, onChallenge, onAccept, onDecline,
+  players, myId, challenges, sentChallenges, onChallenge, onAccept, onDecline, onCancel,
   onSetStatus, onSetTime, waiting,
 }: Props) {
   const others = players.filter((p) => p.id !== myId);
@@ -58,6 +60,25 @@ export function LobbyTable({
               </span>
               <button onClick={() => onAccept(ch.challengeId)} style={actionBtn("#b45309")}>受ける</button>
               <button onClick={() => onDecline(ch.challengeId)} style={actionBtn("#78716c")}>断る</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 送信済み挑戦（キャンセル可能） */}
+      {sentChallenges.length > 0 && (
+        <div style={{
+          padding: 12, backgroundColor: "#eff6ff", border: "1px solid #93c5fd",
+          borderRadius: 10, display: "flex", flexDirection: "column", gap: 8,
+        }}>
+          {sentChallenges.map((challengeId) => (
+            <div key={challengeId} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ flex: 1, fontSize: 13, color: "#1e40af" }}>
+                挑戦を送信中...
+              </span>
+              <button onClick={() => onCancel(challengeId)} style={actionBtn("#6b7280")}>
+                キャンセル
+              </button>
             </div>
           ))}
         </div>
