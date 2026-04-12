@@ -5,6 +5,7 @@ import { io, Socket } from "socket.io-client";
 import type { Color, Move, GameState, GameResult, Pos } from "@shogi24/engine";
 import type { ChatMessage } from "@/components/ChatPanel";
 import { makeMove as engineMakeMove } from "@shogi24/engine";
+import { playStartSound, playChallengeSound } from "@/lib/sounds";
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3025";
 
@@ -144,6 +145,7 @@ export function useSocket(): UseSocketReturn {
 
     socket.on("lobby.challenge.received", (data: IncomingChallenge) => {
       setChallenges((prev) => [...prev, data]);
+      playChallengeSound();
     });
 
     socket.on("lobby.challenge.declined", (data: { challengeId: string }) => {
@@ -156,6 +158,7 @@ export function useSocket(): UseSocketReturn {
       setWaiting(false);
       setChallenges([]);
       setSentChallenges([]);
+      playStartSound();
       setMatch({
         matchId: data.matchId,
         myColor: data.yourColor,

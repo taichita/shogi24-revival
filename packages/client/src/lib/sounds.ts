@@ -124,6 +124,71 @@ export function playBeep(long = false): void {
   });
 }
 
+/** 対局開始音 */
+export function playStartSound(): void {
+  playFile("/sounds/start.mp3", () => {
+    try {
+      const ctx = getCtx();
+      const now = ctx.currentTime;
+
+      // 「カッ」という木の音
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.5, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.12);
+
+      // 少し遅れてもう一度（パパンっ）
+      const osc2 = ctx.createOscillator();
+      osc2.type = "triangle";
+      osc2.frequency.setValueAtTime(900, now + 0.15);
+      osc2.frequency.exponentialRampToValueAtTime(350, now + 0.23);
+      const gain2 = ctx.createGain();
+      gain2.gain.setValueAtTime(0.5, now + 0.15);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.27);
+      osc2.connect(gain2).connect(ctx.destination);
+      osc2.start(now + 0.15);
+      osc2.stop(now + 0.27);
+    } catch {}
+  });
+}
+
+/** 挑戦通知音 */
+export function playChallengeSound(): void {
+  playFile("/sounds/challenge.mp3", () => {
+    try {
+      const ctx = getCtx();
+      const now = ctx.currentTime;
+
+      // ピンポン（2音）
+      const osc1 = ctx.createOscillator();
+      osc1.type = "sine";
+      osc1.frequency.value = 880;
+      const g1 = ctx.createGain();
+      g1.gain.setValueAtTime(0.25, now);
+      g1.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc1.connect(g1).connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.2);
+
+      const osc2 = ctx.createOscillator();
+      osc2.type = "sine";
+      osc2.frequency.value = 1100;
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.25, now + 0.2);
+      g2.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc2.connect(g2).connect(ctx.destination);
+      osc2.start(now + 0.2);
+      osc2.stop(now + 0.45);
+    } catch {}
+  });
+}
+
 /** 対局終了音 */
 export function playEndSound(): void {
   playFile("/sounds/end.mp3", () => {
