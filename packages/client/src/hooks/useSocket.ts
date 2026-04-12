@@ -26,6 +26,7 @@ export interface LobbyPlayer {
   rating: number;
   status: "idle" | "resting" | "automatch" | "playing";
   preferredTime: string;
+  matchId?: string;
 }
 
 export interface IncomingChallenge {
@@ -70,6 +71,9 @@ export interface UseSocketReturn {
   sendResign: () => void;
   sendChat: (message: string) => void;
   backToLobby: () => void;
+  spectating: boolean;
+  spectateMatch: (matchId: string) => Promise<string | null>;
+  leaveSpectate: () => void;
   setLobbyStatus: (status: 'idle' | 'resting' | 'automatch') => void;
   setPreferredTime: (preset: string) => void;
   // 感想戦
@@ -100,6 +104,8 @@ export function useSocket(): UseSocketReturn {
   const [reviewMyBoard, setReviewMyBoard] = useState<GameState | null>(null);
   const [reviewOpponentBoard, setReviewOpponentBoard] = useState<GameState | null>(null);
   const [kickedMessage, setKickedMessage] = useState<string | null>(null);
+  const [spectating, setSpectating] = useState(false);
+  const spectatingMatchIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // URLパラメータ or localStorageからJWTを取得
@@ -143,6 +149,22 @@ export function useSocket(): UseSocketReturn {
       setNeedsHandle(true);
     });
 
+    // 観戦データ受信
+    socket.on("match.spectate.started", (data) => {
+      setSpectating(true);
+      setMatch({
+        matchId: data.matchId,
+        myColor: 'black', // 観戦時は先手視点
+        blackPlayer: data.black,
+        whitePlayer: data.white,
+        game: data.game,
+        clock: data.clock,
+        timePreset: data.timePreset,
+        result: data.result,
+        error: null,
+      });
+    });
+
     // 重複ログインで切断された
     socket.on("auth.kicked", (data: { reason: string }) => {
       setKickedMessage(data.reason);
@@ -152,6 +174,11 @@ export function useSocket(): UseSocketReturn {
     // --- ロビー ---
     socket.on("lobby.snapshot", (data: { players: LobbyPlayer[] }) => {
       setLobbyPlayers(data.players);
+      // 自分のステータスとwaitingを同期
+      const me = data.players.find(p => p.id === socket.id);
+      if (me) {
+        setWaiting(me.status === 'automatch');
+      }
     });
 
     socket.on("lobby.challenge.received", (data: IncomingChallenge) => {
@@ -372,6 +399,10 @@ export function useSocket(): UseSocketReturn {
   }, [match]);
 
   const backToLobby = useCallback(() => {
+    if (spectating && match) {
+      socketRef.current?.emit("match.spectate.leave", { matchId: match.matchId });
+      setSpectating(false);
+    }
     if (reviewMode && match) {
       socketRef.current?.emit("review.leave", { matchId: match.matchId });
     }
@@ -381,7 +412,31 @@ export function useSocket(): UseSocketReturn {
     setReviewMode(false);
     setReviewMyBoard(null);
     setReviewOpponentBoard(null);
-  }, [reviewMode, match]);
+  }, [reviewMode, spectating, match]);
+
+  const spectateMatch = useCallback(async (matchId: string): Promise<string | null> => {
+    const socket = socketRef.current;
+    if (!socket) return "接続されていません";
+    return new Promise((resolve) => {
+      socket.emit("match.spectate", { matchId }, (res: { ok: boolean; error?: string }) => {
+        if (res.ok) {
+          spectatingMatchIdRef.current = matchId;
+          resolve(null);
+        } else {
+          resolve(res.error ?? "観戦に失敗しました");
+        }
+      });
+    });
+  }, []);
+
+  const leaveSpectate = useCallback(() => {
+    if (spectatingMatchIdRef.current) {
+      socketRef.current?.emit("match.spectate.leave", { matchId: spectatingMatchIdRef.current });
+    }
+    spectatingMatchIdRef.current = null;
+    setSpectating(false);
+    setMatch(null);
+  }, []);
 
   const setLobbyStatus = useCallback((status: 'idle' | 'resting' | 'automatch') => {
     socketRef.current?.emit("lobby.setStatus", { status });
@@ -397,6 +452,7 @@ export function useSocket(): UseSocketReturn {
     connected, loggedIn, needsHandle, kickedMessage, myId, handle, waiting,
     lobbyPlayers, challenges, sentChallenges, match, chatMessages,
     login, setHandleName, quickstart, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge,
+    spectating, spectateMatch, leaveSpectate,
     sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
     enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,

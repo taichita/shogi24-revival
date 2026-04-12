@@ -15,6 +15,7 @@ export default function OnlinePage() {
     connected, loggedIn, needsHandle, kickedMessage, myId, handle, waiting,
     lobbyPlayers, challenges, sentChallenges, match, chatMessages,
     login, setHandleName, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge,
+    spectating, spectateMatch, leaveSpectate,
     sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
     enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,
@@ -93,10 +94,26 @@ export default function OnlinePage() {
         }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
             <h1 style={{ fontSize: 22, fontWeight: "bold" }}>R24将棋道場</h1>
-            <span style={{ fontSize: 13, color: "#78716c" }}>オンライン対局</span>
+            <span style={{ fontSize: 13, color: "#78716c" }}>{spectating ? "観戦中" : "オンライン対局"}</span>
           </div>
-          <OnlineGame match={match} onMove={sendMove} onResign={sendResign} chatMessages={chatMessages} onSendChat={sendChat} myHandle={handle} lobbyPlayers={lobbyPlayers} myId={myId} />
-          {match.result && (
+          <OnlineGame
+            match={match} onMove={spectating ? () => {} : sendMove}
+            onResign={spectating ? () => {} : sendResign}
+            chatMessages={chatMessages} onSendChat={sendChat}
+            myHandle={handle} lobbyPlayers={lobbyPlayers} myId={myId}
+          />
+          {spectating ? (
+            <button
+              onClick={leaveSpectate}
+              style={{
+                padding: "10px 24px", fontSize: 15, fontWeight: "bold",
+                backgroundColor: "#44403c", color: "white",
+                borderRadius: 8, border: "none", cursor: "pointer", marginTop: 8,
+              }}
+            >
+              観戦をやめる
+            </button>
+          ) : match.result && (
             <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
               <button
                 onClick={enterReview}
@@ -311,6 +328,10 @@ export default function OnlinePage() {
         onAccept={acceptChallenge}
         onDecline={declineChallenge}
         onCancel={cancelChallenge}
+        onSpectate={async (matchId) => {
+          const err = await spectateMatch(matchId);
+          if (err) { setChallengeMsg(err); setTimeout(() => setChallengeMsg(""), 3000); }
+        }}
         onSetStatus={setLobbyStatus}
         onSetTime={setPreferredTime}
         waiting={waiting}

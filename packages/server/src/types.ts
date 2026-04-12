@@ -70,6 +70,8 @@ export interface ClientToServerEvents {
   'lobby.challenge.accept': (data: { challengeId: string }) => void;
   'lobby.challenge.decline': (data: { challengeId: string }) => void;
   'lobby.challenge.cancel': (data: { challengeId: string }) => void;
+  'match.spectate': (data: { matchId: string }, cb: (res: { ok: boolean; error?: string }) => void) => void;
+  'match.spectate.leave': (data: { matchId: string }) => void;
   'chat.send': (data: { matchId: string; message: string }) => void;
   'review.enter': (data: { matchId: string }) => void;
   'review.move': (data: { matchId: string; move: Move }) => void;
@@ -117,6 +119,15 @@ export interface ServerToClientEvents {
   'auth.restored': (data: { handle: string; rating: number; userId: string }) => void;
   'auth.needsHandle': (data: { userId: string }) => void;
   'auth.kicked': (data: { reason: string }) => void;
+  'match.spectate.started': (data: {
+    matchId: string;
+    black: { handle: string; rating: number };
+    white: { handle: string; rating: number };
+    game: GameState;
+    clock: ClockState;
+    timePreset: TimePreset;
+    result: GameResult | null;
+  }) => void;
   'review.entered': (data: { matchId: string; board: GameState }) => void;
   'review.snapshot': (data: { matchId: string; color: Color; board: GameState }) => void;
   'review.left': (data: { matchId: string; color: Color }) => void;
@@ -128,10 +139,12 @@ export interface LobbyPlayerInfo {
   rating: number;
   status: 'idle' | 'resting' | 'automatch' | 'playing';
   preferredTime: string;
+  matchId?: string;
 }
 
 export interface InterServerEvents {}
 export interface SocketData {
   player?: Player;
   pendingUserId?: string;
+  spectatingMatchId?: string;
 }

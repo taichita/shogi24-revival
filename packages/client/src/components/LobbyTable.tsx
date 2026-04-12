@@ -33,13 +33,14 @@ interface Props {
   onAccept: (challengeId: string) => void;
   onDecline: (challengeId: string) => void;
   onCancel: (challengeId: string) => void;
+  onSpectate: (matchId: string) => void;
   onSetStatus: (status: "idle" | "resting" | "automatch") => void;
   onSetTime: (preset: string) => void;
   waiting: boolean;
 }
 
 export function LobbyTable({
-  players, myId, challenges, sentChallenges, onChallenge, onAccept, onDecline, onCancel,
+  players, myId, challenges, sentChallenges, onChallenge, onAccept, onDecline, onCancel, onSpectate,
   onSetStatus, onSetTime, waiting,
 }: Props) {
   const others = players.filter((p) => p.id !== myId);
@@ -174,6 +175,14 @@ export function LobbyTable({
                         style={actionBtn("#44403c")}
                       >
                         挑戦
+                      </button>
+                    )}
+                    {p.status === "playing" && p.matchId && (
+                      <button
+                        onClick={() => onSpectate(p.matchId!)}
+                        style={actionBtn("#2563eb")}
+                      >
+                        観戦
                       </button>
                     )}
                   </td>

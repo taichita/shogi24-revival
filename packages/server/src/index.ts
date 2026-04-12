@@ -175,10 +175,14 @@ function startMatch(blackPlayer: Player, whitePlayer: Player, presetKey: string)
 }
 
 function broadcastLobby(): void {
-  const players = lobby.getAll().map(p => ({
-    id: p.id, handle: p.handle, rating: p.rating,
-    status: p.status, preferredTime: p.preferredTime,
-  }));
+  const players = lobby.getAll().map(p => {
+    const m = matchManager.getMatchByPlayer(p.id);
+    return {
+      id: p.id, handle: p.handle, rating: p.rating,
+      status: p.status, preferredTime: p.preferredTime,
+      matchId: m?.id,
+    };
+  });
   io.emit('lobby.snapshot', { players });
 }
 
@@ -516,6 +520,36 @@ io.on('connection', (socket) => {
       io.to(matchId).emit('match.result', { matchId, result, clock });
       handleMatchEnd(matchId, result);
     }
+  });
+
+  // --- 観戦 ---
+  socket.on('match.spectate', ({ matchId }, cb) => {
+    const player = socket.data.player;
+    if (!player) { cb({ ok: false, error: 'ログインしてください' }); return; }
+    if (matchManager.getMatchByPlayer(player.id)) { cb({ ok: false, error: '対局中は観戦できません' }); return; }
+
+    const room = matchManager.getMatch(matchId);
+    if (!room) { cb({ ok: false, error: '対局が見つかりません' }); return; }
+
+    socket.join(matchId);
+    socket.data.spectatingMatchId = matchId;
+    cb({ ok: true });
+
+    socket.emit('match.spectate.started', {
+      matchId: room.id,
+      black: { handle: room.black.handle, rating: room.black.rating },
+      white: { handle: room.white.handle, rating: room.white.rating },
+      game: room.game,
+      clock: room.clock,
+      timePreset: room.timePreset,
+      result: room.game.result ?? null,
+    });
+    console.log(`[spectate] ${player.handle} watching ${matchId}`);
+  });
+
+  socket.on('match.spectate.leave', ({ matchId }) => {
+    socket.leave(matchId);
+    socket.data.spectatingMatchId = undefined;
   });
 
   // --- 感想戦 ---
