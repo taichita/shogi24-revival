@@ -102,8 +102,19 @@ export function useSocket(): UseSocketReturn {
   const [kickedMessage, setKickedMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // localStorageからJWTを取得して接続時に送信
-    const storedToken = typeof window !== 'undefined' ? localStorage.getItem('shogi24_token') : null;
+    // URLパラメータ or localStorageからJWTを取得
+    let storedToken: string | null = null;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get('token');
+      if (urlToken) {
+        localStorage.setItem('shogi24_token', urlToken);
+        storedToken = urlToken;
+        window.history.replaceState({}, '', '/online');
+      } else {
+        storedToken = localStorage.getItem('shogi24_token');
+      }
+    }
     const socket = io(SERVER_URL, {
       autoConnect: true,
       auth: storedToken ? { token: storedToken } : undefined,

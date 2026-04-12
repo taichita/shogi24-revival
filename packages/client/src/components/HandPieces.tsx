@@ -34,10 +34,10 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
           alignItems: "center",
           gap: 4,
           padding: "8px 6px",
-          minWidth: 50,
+          minWidth: 54,
           borderRadius: 8,
-          border: "1px solid #d6d3d1",
-          backgroundColor: "#fafaf9",
+          border: "2px solid #92400e",
+          backgroundColor: "#fffbeb",
         }}
       >
         <span style={{ fontSize: 11, color: "#78716c", writingMode: "vertical-rl" }}>
@@ -91,8 +91,8 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
         padding: "8px 12px",
         minHeight: 44,
         borderRadius: 8,
-        border: "1px solid #d6d3d1",
-        backgroundColor: "#fafaf9",
+        border: "2px solid #92400e",
+        backgroundColor: "#fffbeb",
         width: 9 * 44 + 4,
       }}
     >

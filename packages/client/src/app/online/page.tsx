@@ -10,16 +10,7 @@ import { getSelectableRanks } from "@shogi24/engine";
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3025";
 
 export default function OnlinePage() {
-  // URLからtokenパラメータを取得してlocalStorageに保存
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    if (token) {
-      localStorage.setItem('shogi24_token', token);
-      // URLからtokenを除去
-      window.history.replaceState({}, '', '/online');
-    }
-  }, []);
+  // トークン処理はuseSocket内で実行
   const {
     connected, loggedIn, needsHandle, kickedMessage, myId, handle, waiting,
     lobbyPlayers, challenges, sentChallenges, match, chatMessages,

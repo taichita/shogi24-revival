@@ -88,7 +88,7 @@ function startBgm(): void {
   }
   bgmAudio = new Audio("/sounds/bgm.mp3");
   bgmAudio.loop = true;
-  bgmAudio.volume = 0.3;
+  bgmAudio.volume = 0.1;
   bgmAudio.play().catch(() => {});
 }
 
