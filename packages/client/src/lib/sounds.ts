@@ -1,14 +1,19 @@
 "use client";
 
 /**
- * 音声ファイルの差し替え方法:
- * 1. packages/client/public/sounds/ に音声ファイルを置く
- * 2. 以下のファイル名で配置すると自動で使われる:
- *    - move.mp3   : 駒を置く音（パチッ）
- *    - beep.mp3   : 秒読みの短い電子音（ピッ）
- *    - beep-long.mp3 : 秒読みの長い電子音（ピーー）
- *    - end.mp3    : 対局終了音
- * 3. ファイルが存在しない場合はWeb Audio APIで合成した音が鳴る
+ * 音声ファイル配置: packages/client/public/sounds/
+ *
+ * 命名規則（すべて小文字、ハイフン区切り）:
+ *   bgm.mp3        — BGM（ループ再生）
+ *   start.mp3      — 対局開始
+ *   move-1.m4a     — 駒音パターン1（ランダムで再生）
+ *   move-2.m4a     — 駒音パターン2
+ *   end.mp3        — 対局終了
+ *   challenge.mp3  — 挑戦通知
+ *   beep.mp3       — 秒読み短音
+ *   beep-long.mp3  — 秒読み長音
+ *
+ * ファイルが存在しない場合はWeb Audio APIの合成音にフォールバック。
  */
 
 let audioCtx: AudioContext | null = null;
@@ -18,83 +23,133 @@ function getCtx(): AudioContext {
   return audioCtx;
 }
 
-// 音声ファイルのキャッシュ
+// ============================================================
+// ファイル再生ユーティリティ
+// ============================================================
+
 const audioCache = new Map<string, HTMLAudioElement | null>();
 
-/** 音声ファイルを再生。なければfallbackを実行 */
 function playFile(path: string, fallback: () => void): void {
-  // キャッシュ済みで存在しないことが分かっている
   if (audioCache.has(path) && audioCache.get(path) === null) {
     fallback();
     return;
   }
-
-  // キャッシュ済みで存在する
   const cached = audioCache.get(path);
   if (cached) {
-    cached.currentTime = 0;
-    cached.play().catch(() => {});
+    const clone = cached.cloneNode() as HTMLAudioElement;
+    clone.play().catch(() => {});
     return;
   }
-
-  // 初回: ファイルの存在確認
   const audio = new Audio(path);
   audio.addEventListener("canplaythrough", () => {
     audioCache.set(path, audio);
     audio.play().catch(() => {});
   }, { once: true });
   audio.addEventListener("error", () => {
-    audioCache.set(path, null); // 存在しないとマーク
+    audioCache.set(path, null);
     fallback();
   }, { once: true });
   audio.load();
 }
 
-/** 駒を置く音（パチッ） */
+// ============================================================
+// BGM
+// ============================================================
+
+let bgmAudio: HTMLAudioElement | null = null;
+let bgmEnabled = false;
+
+const BGM_STORAGE_KEY = "r24_bgm_enabled";
+
+/** BGMの初期状態をlocalStorageから読み込む */
+export function getBgmEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  const stored = localStorage.getItem(BGM_STORAGE_KEY);
+  return stored === "true";
+}
+
+/** BGMのオンオフを切り替える */
+export function setBgmEnabled(enabled: boolean): void {
+  bgmEnabled = enabled;
+  if (typeof window !== "undefined") {
+    localStorage.setItem(BGM_STORAGE_KEY, String(enabled));
+  }
+  if (enabled) {
+    startBgm();
+  } else {
+    stopBgm();
+  }
+}
+
+function startBgm(): void {
+  if (bgmAudio) {
+    bgmAudio.play().catch(() => {});
+    return;
+  }
+  bgmAudio = new Audio("/sounds/bgm.mp3");
+  bgmAudio.loop = true;
+  bgmAudio.volume = 0.3;
+  bgmAudio.play().catch(() => {});
+}
+
+function stopBgm(): void {
+  if (bgmAudio) {
+    bgmAudio.pause();
+  }
+}
+
+// ============================================================
+// SE
+// ============================================================
+
+/** 駒を置く音（2種ランダム） */
 export function playMoveSound(): void {
-  playFile("/sounds/move.mp3", () => {
-    try {
-      const ctx = getCtx();
-      const duration = 0.08;
-      const now = ctx.currentTime;
+  const variant = Math.random() < 0.5 ? 1 : 2;
+  playFile(`/sounds/move-${variant}.m4a`, () => {
+    // 両方なければ合成音にフォールバック
+    playFile("/sounds/move.mp3", () => {
+      try {
+        const ctx = getCtx();
+        const duration = 0.08;
+        const now = ctx.currentTime;
 
-      const bufferSize = Math.floor(ctx.sampleRate * duration);
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.15));
-      }
-      const noise = ctx.createBufferSource();
-      noise.buffer = buffer;
+        const bufferSize = Math.floor(ctx.sampleRate * duration);
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.15));
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
 
-      const filter = ctx.createBiquadFilter();
-      filter.type = "bandpass";
-      filter.frequency.value = 2500;
-      filter.Q.value = 2;
+        const filter = ctx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = 2500;
+        filter.Q.value = 2;
 
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.6, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.6, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        noise.connect(filter).connect(gain).connect(ctx.destination);
+        noise.start(now);
+        noise.stop(now + duration);
 
-      noise.connect(filter).connect(gain).connect(ctx.destination);
-      noise.start(now);
-      noise.stop(now + duration);
-
-      const osc = ctx.createOscillator();
-      osc.type = "square";
-      osc.frequency.setValueAtTime(1800, now);
-      osc.frequency.exponentialRampToValueAtTime(400, now + 0.03);
-      const oscGain = ctx.createGain();
-      oscGain.gain.setValueAtTime(0.15, now);
-      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-      osc.connect(oscGain).connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.05);
-    } catch {}
+        const osc = ctx.createOscillator();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(1800, now);
+        osc.frequency.exponentialRampToValueAtTime(400, now + 0.03);
+        const oscGain = ctx.createGain();
+        oscGain.gain.setValueAtTime(0.15, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.connect(oscGain).connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      } catch {}
+    });
   });
 }
 
-/** 秒読み電子音（ピッ） */
+/** 秒読み電子音 */
 export function playBeep(long = false): void {
   const path = long ? "/sounds/beep-long.mp3" : "/sounds/beep.mp3";
   playFile(path, () => {
@@ -116,7 +171,6 @@ export function playBeep(long = false): void {
       } else {
         gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
       }
-
       osc.connect(gain).connect(ctx.destination);
       osc.start(now);
       osc.stop(now + duration);
@@ -131,7 +185,6 @@ export function playStartSound(): void {
       const ctx = getCtx();
       const now = ctx.currentTime;
 
-      // 「カッ」という木の音
       const osc = ctx.createOscillator();
       osc.type = "triangle";
       osc.frequency.setValueAtTime(800, now);
@@ -143,7 +196,6 @@ export function playStartSound(): void {
       osc.start(now);
       osc.stop(now + 0.12);
 
-      // 少し遅れてもう一度（パパンっ）
       const osc2 = ctx.createOscillator();
       osc2.type = "triangle";
       osc2.frequency.setValueAtTime(900, now + 0.15);
@@ -165,7 +217,6 @@ export function playChallengeSound(): void {
       const ctx = getCtx();
       const now = ctx.currentTime;
 
-      // ピンポン（2音）
       const osc1 = ctx.createOscillator();
       osc1.type = "sine";
       osc1.frequency.value = 880;
@@ -196,21 +247,17 @@ export function playEndSound(): void {
       const ctx = getCtx();
       const now = ctx.currentTime;
 
-      // 低めの「ドン」という音
       const osc = ctx.createOscillator();
       osc.type = "sine";
       osc.frequency.setValueAtTime(220, now);
       osc.frequency.exponentialRampToValueAtTime(110, now + 0.3);
-
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.4, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-
       osc.connect(gain).connect(ctx.destination);
       osc.start(now);
       osc.stop(now + 0.5);
 
-      // 高めの余韻「リーン」
       const osc2 = ctx.createOscillator();
       osc2.type = "sine";
       osc2.frequency.value = 660;

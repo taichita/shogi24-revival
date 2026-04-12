@@ -12,7 +12,7 @@ import { HandPieces } from "./HandPieces";
 import { PromotionDialog } from "./PromotionDialog";
 import { MoveList } from "./MoveList";
 import { LobbySidebar } from "./LobbySidebar";
-import { playMoveSound, playBeep, playEndSound } from "@/lib/sounds";
+import { playMoveSound, playBeep, playEndSound, getBgmEnabled, setBgmEnabled } from "@/lib/sounds";
 
 type SelectionState =
   | { type: "none" }
@@ -45,6 +45,7 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
   const [flipped, setFlipped] = useState(match.myColor === "white");
   const [chatInput, setChatInput] = useState("");
   const [showEndEffect, setShowEndEffect] = useState(false);
+  const [bgmOn, setBgmOn] = useState(() => getBgmEnabled());
   const prevMoveCount = useRef(0);
   const prevResult = useRef<boolean>(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -205,6 +206,21 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
               }}
             >
               盤面反転
+            </button>
+            <button
+              onClick={() => {
+                const next = !bgmOn;
+                setBgmOn(next);
+                setBgmEnabled(next);
+              }}
+              style={{
+                padding: "4px 12px", fontSize: 12,
+                backgroundColor: bgmOn ? "#dbeafe" : "#e7e5e4",
+                borderRadius: 6, border: bgmOn ? "1px solid #93c5fd" : "none",
+                cursor: "pointer",
+              }}
+            >
+              BGM {bgmOn ? "ON" : "OFF"}
             </button>
             {!match.result && (
               <button
