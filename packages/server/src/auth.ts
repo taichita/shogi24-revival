@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
-import { findOrCreateGoogleUser, getUserById, type DbUser } from './db.js';
+import { findOrCreateGoogleUser, getUserById, setUserHandle, type DbUser } from './db.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
@@ -48,8 +48,9 @@ authRouter.get('/google/callback', async (req, res) => {
 
     const user = findOrCreateGoogleUser(googleId, displayName, avatarUrl);
 
+    const needsHandle = !user.handle;
     const token = jwt.sign(
-      { userId: user.id, handle: user.handle },
+      { userId: user.id, handle: user.handle, needsHandle },
       JWT_SECRET,
       { expiresIn: '30d' },
     );
@@ -64,9 +65,11 @@ authRouter.get('/google/callback', async (req, res) => {
 /** JWTを検証してDbUserを返す */
 export function verifyToken(token: string): DbUser | undefined {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; handle: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; handle: string | null };
     return getUserById(decoded.userId);
   } catch {
     return undefined;
   }
 }
+
+export { setUserHandle };

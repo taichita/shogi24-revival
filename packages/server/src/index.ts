@@ -11,7 +11,7 @@ import { opponent, apply24Rating, createGame, makeMove as engineMakeMove } from 
 import { MatchManager } from './match-manager.js';
 import { MatchQueue } from './queue.js';
 import { Lobby } from './lobby.js';
-import { initDb, loginOrCreate, updateRating, saveMatch, getUserById } from './db.js';
+import { initDb, loginOrCreate, updateRating, saveMatch, getUserById, setUserHandle } from './db.js';
 import { authRouter, verifyToken } from './auth.js';
 
 const PORT = Number(process.env.PORT ?? 3025);
@@ -22,6 +22,11 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
 
 const app = express();
 app.use(cors({ origin: ALLOWED_ORIGINS }));
+
+// ヘルスチェック（Renderスリープ防止用）
+app.get('/', (_req, res) => { res.send('ok'); });
+app.get('/health', (_req, res) => { res.json({ status: 'ok', uptime: process.uptime() }); });
+
 app.use('/auth', authRouter);
 const httpServer = createServer(app);
 
@@ -79,6 +84,9 @@ function sanitize(str: string): string {
 const matchManager = new MatchManager();
 const queue = new MatchQueue();
 const lobby = new Lobby();
+
+/** userId → socketId マップ（重複ログイン防止） */
+const userIdToSocketId = new Map<string, string>();
 
 // ============================================================
 // ヘルパー: 対局開始
@@ -238,17 +246,36 @@ io.on('connection', (socket) => {
   if (token) {
     const dbUser = verifyToken(token);
     if (dbUser) {
-      const player: Player = {
-        id: socket.id,
-        userId: dbUser.id,
-        handle: dbUser.handle,
-        rating: dbUser.rating,
-      };
-      socket.data.player = player;
-      lobby.join(player);
-      socket.emit('auth.restored', { handle: dbUser.handle, rating: dbUser.rating, userId: dbUser.id });
-      console.log(`[jwt-login] ${player.handle} (${socket.id})`);
-      broadcastLobby();
+      // 重複ログイン防止: 同じuserIdの既存接続を切断
+      const existingSocketId = userIdToSocketId.get(dbUser.id);
+      if (existingSocketId && existingSocketId !== socket.id) {
+        const existingSocket = io.sockets.sockets.get(existingSocketId);
+        if (existingSocket) {
+          existingSocket.emit('auth.kicked', { reason: '別のタブでログインされました' });
+          existingSocket.disconnect(true);
+          console.log(`[kick] ${dbUser.handle ?? dbUser.id} old=${existingSocketId} new=${socket.id}`);
+        }
+      }
+      userIdToSocketId.set(dbUser.id, socket.id);
+
+      if (!dbUser.handle) {
+        // ハンドル名未設定 → 設定画面へ誘導
+        socket.data.pendingUserId = dbUser.id;
+        socket.emit('auth.needsHandle', { userId: dbUser.id });
+        console.log(`[jwt-login] needs handle (${socket.id})`);
+      } else {
+        const player: Player = {
+          id: socket.id,
+          userId: dbUser.id,
+          handle: dbUser.handle,
+          rating: dbUser.rating,
+        };
+        socket.data.player = player;
+        lobby.join(player);
+        socket.emit('auth.restored', { handle: dbUser.handle, rating: dbUser.rating, userId: dbUser.id });
+        console.log(`[jwt-login] ${player.handle} (${socket.id})`);
+        broadcastLobby();
+      }
     }
   }
 
@@ -272,13 +299,58 @@ io.on('connection', (socket) => {
     const player: Player = {
       id: socket.id,
       userId: dbUser.id,
-      handle: dbUser.handle,
+      handle: dbUser.handle!,
       rating: dbUser.rating,
     };
     socket.data.player = player;
     lobby.join(player);
     cb({ ok: true, playerId: socket.id });
     console.log(`[login] ${player.handle} (${socket.id})`);
+    broadcastLobby();
+  });
+
+  // --- ハンドル名設定（Google認証後の初回のみ） ---
+  socket.on('auth.setHandle', ({ handle: rawHandle }, cb) => {
+    if (!checkRateLimit(socket.id, 3)) {
+      cb({ ok: false, error: 'リクエストが多すぎます' });
+      return;
+    }
+    const pendingUserId = socket.data.pendingUserId;
+    if (!pendingUserId) {
+      cb({ ok: false, error: '無効なリクエストです' });
+      return;
+    }
+    if (!rawHandle || rawHandle.trim().length === 0) {
+      cb({ ok: false, error: 'ハンドル名を入力してください' });
+      return;
+    }
+    const cleanHandle = sanitize(rawHandle).slice(0, 20);
+    if (cleanHandle.length === 0) {
+      cb({ ok: false, error: '使用できない文字が含まれています' });
+      return;
+    }
+    const result = setUserHandle(pendingUserId, cleanHandle);
+    if (!result.ok) {
+      cb({ ok: false, error: result.error });
+      return;
+    }
+    const dbUser = getUserById(pendingUserId);
+    if (!dbUser || !dbUser.handle) {
+      cb({ ok: false, error: '設定に失敗しました' });
+      return;
+    }
+    // ロビーに参加
+    const player: Player = {
+      id: socket.id,
+      userId: dbUser.id,
+      handle: dbUser.handle,
+      rating: dbUser.rating,
+    };
+    socket.data.player = player;
+    socket.data.pendingUserId = undefined;
+    lobby.join(player);
+    cb({ ok: true, handle: dbUser.handle, rating: dbUser.rating });
+    console.log(`[setHandle] ${dbUser.handle} (${socket.id})`);
     broadcastLobby();
   });
 
@@ -366,11 +438,13 @@ io.on('connection', (socket) => {
     const black = Math.random() < 0.5 ? ch.from : ch.to;
     const white = black.id === ch.from.id ? ch.to : ch.from;
 
-    startMatch(
-      { id: black.id, handle: black.handle, rating: black.rating },
-      { id: white.id, handle: white.handle, rating: white.rating },
-      ch.timePreset,
-    );
+    const blackSocket = io.sockets.sockets.get(black.id);
+    const whiteSocket = io.sockets.sockets.get(white.id);
+    const blackPlayer = blackSocket?.data.player;
+    const whitePlayer = whiteSocket?.data.player;
+    if (!blackPlayer || !whitePlayer) return;
+
+    startMatch(blackPlayer, whitePlayer, ch.timePreset);
     console.log(`[challenge accepted] ${ch.from.handle} vs ${ch.to.handle}`);
   });
 
@@ -530,6 +604,17 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const player = socket.data.player;
     console.log(`[disconnect] ${player?.handle ?? socket.id}`);
+
+    // userIdToSocketIdのクリーンアップ（現在の接続のみ削除）
+    if (player?.userId) {
+      const current = userIdToSocketId.get(player.userId);
+      if (current === socket.id) userIdToSocketId.delete(player.userId);
+    }
+    const pendingId = socket.data.pendingUserId;
+    if (pendingId) {
+      const current = userIdToSocketId.get(pendingId);
+      if (current === socket.id) userIdToSocketId.delete(pendingId);
+    }
 
     queue.remove(socket.id);
     lobby.leave(socket.id);

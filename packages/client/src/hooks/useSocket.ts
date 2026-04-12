@@ -48,6 +48,8 @@ export interface OnlineMatchState {
 export interface UseSocketReturn {
   connected: boolean;
   loggedIn: boolean;
+  needsHandle: boolean;
+  kickedMessage: string | null;
   myId: string | null;
   handle: string | null;
   waiting: boolean;
@@ -56,6 +58,7 @@ export interface UseSocketReturn {
   match: OnlineMatchState | null;
   chatMessages: ChatMessage[];
   login: (handle: string) => Promise<boolean>;
+  setHandleName: (handle: string) => Promise<{ ok: boolean; error?: string }>;
   quickstart: (timePreset?: string) => Promise<void>;
   sendChallenge: (targetId: string, timePreset: string) => Promise<string | null>;
   acceptChallenge: (challengeId: string) => void;
@@ -81,6 +84,7 @@ export function useSocket(): UseSocketReturn {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [needsHandle, setNeedsHandle] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
   const [handle, setHandle] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
@@ -91,6 +95,7 @@ export function useSocket(): UseSocketReturn {
   const [reviewMode, setReviewMode] = useState(false);
   const [reviewMyBoard, setReviewMyBoard] = useState<GameState | null>(null);
   const [reviewOpponentBoard, setReviewOpponentBoard] = useState<GameState | null>(null);
+  const [kickedMessage, setKickedMessage] = useState<string | null>(null);
 
   useEffect(() => {
     // localStorageからJWTを取得して接続時に送信
@@ -114,7 +119,19 @@ export function useSocket(): UseSocketReturn {
     // JWT自動認証の復元
     socket.on("auth.restored", (data: { handle: string; rating: number; userId: string }) => {
       setLoggedIn(true);
+      setNeedsHandle(false);
       setHandle(data.handle);
+    });
+
+    // ハンドル名未設定
+    socket.on("auth.needsHandle", () => {
+      setNeedsHandle(true);
+    });
+
+    // 重複ログインで切断された
+    socket.on("auth.kicked", (data: { reason: string }) => {
+      setKickedMessage(data.reason);
+      setLoggedIn(false);
     });
 
     // --- ロビー ---
@@ -230,6 +247,23 @@ export function useSocket(): UseSocketReturn {
     });
   }, []);
 
+  const setHandleName = useCallback(async (h: string): Promise<{ ok: boolean; error?: string }> => {
+    const socket = socketRef.current;
+    if (!socket) return { ok: false, error: '接続されていません' };
+    return new Promise((resolve) => {
+      socket.emit("auth.setHandle", { handle: h }, (res: { ok: boolean; handle?: string; rating?: number; error?: string }) => {
+        if (res.ok && res.handle) {
+          setNeedsHandle(false);
+          setLoggedIn(true);
+          setHandle(res.handle);
+          resolve({ ok: true });
+        } else {
+          resolve({ ok: false, error: res.error ?? 'ハンドル名の設定に失敗しました' });
+        }
+      });
+    });
+  }, []);
+
   const quickstart = useCallback(async (timePreset?: string): Promise<void> => {
     const socket = socketRef.current;
     if (!socket) return;
@@ -333,9 +367,9 @@ export function useSocket(): UseSocketReturn {
   }, []);
 
   return {
-    connected, loggedIn, myId, handle, waiting,
+    connected, loggedIn, needsHandle, kickedMessage, myId, handle, waiting,
     lobbyPlayers, challenges, match, chatMessages,
-    login, quickstart, sendChallenge, acceptChallenge, declineChallenge,
+    login, setHandleName, quickstart, sendChallenge, acceptChallenge, declineChallenge,
     sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
     enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,

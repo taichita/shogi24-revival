@@ -26,7 +26,7 @@ export async function initDb(): Promise<void> {
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id           TEXT PRIMARY KEY,
-      handle       TEXT NOT NULL UNIQUE,
+      handle       TEXT UNIQUE,
       google_id    TEXT UNIQUE,
       display_name TEXT,
       avatar_url   TEXT,
@@ -70,7 +70,7 @@ function save(): void {
 
 export interface DbUser {
   id: string;
-  handle: string;
+  handle: string | null;
   googleId?: string;
   displayName?: string;
   avatarUrl?: string;
@@ -117,24 +117,31 @@ export function findOrCreateGoogleUser(googleId: string, displayName: string, av
     db.run('UPDATE users SET display_name = ?, avatar_url = ? WHERE google_id = ?', [displayName, avatarUrl ?? null, googleId]);
     save();
     return {
-      id: r[0] as string, handle: r[1] as string, googleId: r[2] as string,
+      id: r[0] as string, handle: r[1] as string | null, googleId: r[2] as string,
       displayName: r[3] as string, avatarUrl: r[4] as string,
       rating: r[5] as number, games: r[6] as number, wins: r[7] as number,
     };
   }
-  // 新規作成: handleはdisplayName（重複時はランダムサフィックス付与）
-  let handle = displayName.slice(0, 20);
-  const existing = db.exec('SELECT id FROM users WHERE handle = ?', [handle]);
-  if (existing.length > 0 && existing[0].values.length > 0) {
-    handle = `${handle.slice(0, 16)}_${Math.random().toString(36).slice(2, 6)}`;
-  }
+  // 新規作成: handleはNULL（初回ログイン時にユーザーが設定）
   const id = randomUUID();
   db.run(
-    'INSERT INTO users (id, handle, google_id, display_name, avatar_url, rating, games, wins) VALUES (?, ?, ?, ?, ?, 1500, 0, 0)',
-    [id, handle, googleId, displayName, avatarUrl ?? null],
+    'INSERT INTO users (id, google_id, display_name, avatar_url, rating, games, wins) VALUES (?, ?, ?, ?, 1500, 0, 0)',
+    [id, googleId, displayName, avatarUrl ?? null],
   );
   save();
-  return { id, handle, googleId, displayName, avatarUrl, rating: 1500, games: 0, wins: 0 };
+  return { id, handle: null, googleId, displayName, avatarUrl, rating: 1500, games: 0, wins: 0 };
+}
+
+/** ハンドル名を設定（Google認証ユーザーの初回設定） */
+export function setUserHandle(userId: string, handle: string): { ok: boolean; error?: string } {
+  // 重複チェック
+  const existing = db.exec('SELECT id FROM users WHERE handle = ?', [handle]);
+  if (existing.length > 0 && existing[0].values.length > 0) {
+    return { ok: false, error: 'このハンドル名は既に使用されています' };
+  }
+  db.run('UPDATE users SET handle = ? WHERE id = ?', [handle, userId]);
+  save();
+  return { ok: true };
 }
 
 /** IDでユーザー取得 */

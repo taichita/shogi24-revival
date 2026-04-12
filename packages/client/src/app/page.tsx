@@ -31,7 +31,7 @@ export default function GamePage() {
       {/* ヘッダー */}
       <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
         <h1 style={{ fontSize: 22, fontWeight: "bold", letterSpacing: "0.05em" }}>
-          将棋倶楽部24 Revival
+          R24将棋道場
         </h1>
         <span style={{ fontSize: 13, color: "#78716c" }}>ローカル対局</span>
       </div>

@@ -6,12 +6,12 @@ import {
   getLegalMovesFrom, getLegalDrops,
   isCheckmate, isCheck, moveToJapanese,
 } from "@shogi24/engine";
-import type { OnlineMatchState } from "@/hooks/useSocket";
+import type { OnlineMatchState, LobbyPlayer } from "@/hooks/useSocket";
 import { ShogiBoard } from "./ShogiBoard";
 import { HandPieces } from "./HandPieces";
 import { PromotionDialog } from "./PromotionDialog";
 import { MoveList } from "./MoveList";
-import { ChatPanel, type ChatMessage } from "./ChatPanel";
+import { LobbySidebar } from "./LobbySidebar";
 import { playMoveSound, playBeep } from "@/lib/sounds";
 
 type SelectionState =
@@ -25,12 +25,12 @@ interface Props {
   match: OnlineMatchState;
   onMove: (move: Move) => void;
   onResign: () => void;
-  chatMessages: ChatMessage[];
+  chatMessages: { sender: string; message: string; timestamp: number }[];
   onSendChat: (message: string) => void;
   myHandle: string | null;
+  lobbyPlayers: LobbyPlayer[];
+  myId: string | null;
 }
-
-const BOARD_W = 9 * 44 + 4;
 
 function formatTime(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -39,17 +39,19 @@ function formatTime(ms: number): string {
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
-export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, myHandle }: Props) {
+export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, myHandle, lobbyPlayers, myId }: Props) {
   const [selection, setSelection] = useState<SelectionState>({ type: "none" });
   const [promotionPending, setPromotionPending] = useState<PromotionChoice | null>(null);
   const [flipped, setFlipped] = useState(match.myColor === "white");
+  const [chatInput, setChatInput] = useState("");
   const prevMoveCount = useRef(0);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const game = match.game;
   const myColor = match.myColor;
   const isMyTurn = game ? game.turn === myColor : false;
 
-  // 着手音: 手数が増えたら鳴らす
+  // 着手音
   useEffect(() => {
     if (!game) return;
     if (game.moveCount > prevMoveCount.current) {
@@ -58,21 +60,21 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
     }
   }, [game?.moveCount]);
 
-  // 秒読み音: 自分の手番で秒読み中に鳴らす
+  // 秒読み音
   useEffect(() => {
     if (!match.clock || !game || match.result || !isMyTurn) return;
     const myClock = match.clock[myColor];
     if (!myClock.inByoyomi) return;
-
     const remainSec = Math.floor(myClock.remainMs / 1000);
-    if (remainSec <= 5) {
-      playBeep(true); // 残り5秒以下: 長い音
-    } else if (remainSec <= 10) {
-      playBeep(false); // 残り10秒以下: 毎秒ビープ
-    } else if (remainSec % 10 === 0 && remainSec > 0) {
-      playBeep(false); // 10秒ごとのビープ
-    }
+    if (remainSec <= 5) playBeep(true);
+    else if (remainSec <= 10) playBeep(false);
+    else if (remainSec % 10 === 0 && remainSec > 0) playBeep(false);
   }, [match.clock, isMyTurn, myColor, game, match.result]);
+
+  // チャット自動スクロール
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages.length]);
 
   const status = useMemo(() => {
     if (match.result) {
@@ -91,7 +93,6 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
     return `${turnLabel} の手番`;
   }, [game, match]);
 
-  // game.moves から全手の棋譜を生成
   const moveHistory = useMemo(() => {
     if (!game) return [];
     return game.moves.map((m, i) => {
@@ -141,13 +142,19 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
     executeMove(promote ? promotionPending.promoteMove : promotionPending.noPromoteMove);
   }, [promotionPending, executeMove]);
 
+  const handleSendChat = () => {
+    const text = chatInput.trim();
+    if (text.length === 0) return;
+    onSendChat(text);
+    setChatInput("");
+  };
+
   if (!game) {
     return <div style={{ padding: 40, textAlign: "center", fontSize: 18 }}>対局準備中...</div>;
   }
 
   const lastMove = game.moves.length > 0 ? game.moves[game.moves.length - 1] : undefined;
 
-  // flip時: 上が自分、下が相手 → 逆にする
   const topColor: Color = flipped ? "black" : "white";
   const botColor: Color = flipped ? "white" : "black";
   const topPlayer = topColor === "black" ? match.blackPlayer : match.whitePlayer;
@@ -156,52 +163,16 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
   const botClock = match.clock?.[botColor];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-      <div style={{ fontSize: 15, fontWeight: "bold" }}>{status}</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+      {/* ステータス */}
+      <div style={{ fontSize: 15, fontWeight: "bold", textAlign: "center" }}>{status}</div>
 
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        {/* 盤面エリア */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
-          <PlayerBar
-            handle={topPlayer.handle} rating={topPlayer.rating}
-            clock={topClock} isActive={game.turn === topColor && !match.result}
-            color={topColor}
-          />
-          <HandPieces
-            hand={game.hands[topColor]}
-            color={topColor}
-            isActive={false}
-            selection={{ type: "none" }}
-            onSelect={() => {}}
-            flipped={flipped}
-          />
-          <ShogiBoard
-            board={game.board}
-            selection={isMyTurn ? selection : { type: "none" }}
-            onCellClick={selectCell}
-            lastMove={lastMove}
-            flipped={flipped}
-          />
-          <HandPieces
-            hand={game.hands[botColor]}
-            color={botColor}
-            isActive={isMyTurn && !match.result}
-            selection={selection}
-            onSelect={selectHandPiece}
-            flipped={flipped}
-          />
-          <PlayerBar
-            handle={botPlayer.handle} rating={botPlayer.rating}
-            clock={botClock} isActive={game.turn === botColor && !match.result}
-            color={botColor}
-          />
-        </div>
-
-        {/* 右: 棋譜+チャット+ボタン */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, height: 500 }}>
+      {/* メインエリア: 棋譜 | 持ち駒+盤面+持ち駒 | ロビー */}
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "stretch" }}>
+        {/* 左: 棋譜 */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, width: 180 }}>
           <MoveList moves={moveHistory} />
-          <ChatPanel messages={chatMessages} onSend={onSendChat} myHandle={myHandle} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <button
               onClick={() => setFlipped((f) => !f)}
               style={{
@@ -224,12 +195,128 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
             )}
           </div>
         </div>
+
+        {/* 中央: 盤面エリア（持ち駒は対角配置） */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+          {/* 相手プレイヤーバー */}
+          <PlayerBar
+            handle={topPlayer.handle} rating={topPlayer.rating}
+            clock={topClock} isActive={game.turn === topColor && !match.result}
+            color={topColor}
+          />
+
+          {/* 相手持ち駒(左上) + 盤面 + 空白 */}
+          <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+            <HandPieces
+              hand={game.hands[topColor]}
+              color={topColor}
+              isActive={false}
+              selection={{ type: "none" }}
+              onSelect={() => {}}
+              flipped={flipped}
+              vertical
+            />
+            <ShogiBoard
+              board={game.board}
+              selection={isMyTurn ? selection : { type: "none" }}
+              onCellClick={selectCell}
+              lastMove={lastMove}
+              flipped={flipped}
+            />
+            {/* 右下の自分の持ち駒は下に配置するためスペーサー */}
+            <div style={{ width: 50 }} />
+          </div>
+
+          {/* 空白 + 盤面なし + 自分持ち駒(右下) */}
+          <div style={{ display: "flex", gap: 6, alignItems: "flex-end", alignSelf: "flex-end" }}>
+            <HandPieces
+              hand={game.hands[botColor]}
+              color={botColor}
+              isActive={isMyTurn && !match.result}
+              selection={selection}
+              onSelect={selectHandPiece}
+              flipped={flipped}
+              vertical
+            />
+          </div>
+
+          {/* 自分プレイヤーバー */}
+          <PlayerBar
+            handle={botPlayer.handle} rating={botPlayer.rating}
+            clock={botClock} isActive={game.turn === botColor && !match.result}
+            color={botColor}
+          />
+        </div>
+
+        {/* 右: ロビーサイドバー */}
+        <LobbySidebar players={lobbyPlayers} myId={myId} />
+      </div>
+
+      {/* 下部: チャットバー */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          padding: "8px 12px",
+          backgroundColor: "#fafaf9",
+          border: "1px solid #d6d3d1",
+          borderRadius: 8,
+          alignItems: "center",
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            gap: 6,
+            overflowX: "auto",
+            fontSize: 12,
+            maxHeight: 40,
+            overflowY: "auto",
+          }}
+        >
+          {chatMessages.length === 0 && (
+            <span style={{ color: "#a8a29e", fontSize: 11 }}>チャット</span>
+          )}
+          {chatMessages.slice(-5).map((m, i) => (
+            <span key={i} style={{ whiteSpace: "nowrap" }}>
+              <span style={{ fontWeight: m.sender === myHandle ? "bold" : "normal", color: m.sender === myHandle ? "#1c1917" : "#57534e" }}>
+                {m.sender}:
+              </span>{" "}
+              {m.message}
+            </span>
+          ))}
+          <div ref={chatBottomRef} />
+        </div>
+        <input
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSendChat(); }}
+          maxLength={200}
+          placeholder="メッセージ..."
+          style={{
+            width: 200, padding: "4px 8px", fontSize: 12, borderRadius: 4,
+            border: "1px solid #d6d3d1", outline: "none",
+          }}
+        />
+        <button
+          onClick={handleSendChat}
+          style={{
+            padding: "4px 10px", fontSize: 12, borderRadius: 4,
+            border: "1px solid #d6d3d1", backgroundColor: "#44403c",
+            color: "#fff", cursor: "pointer",
+          }}
+        >
+          送信
+        </button>
       </div>
 
       {promotionPending && <PromotionDialog onConfirm={confirmPromotion} />}
     </div>
   );
 }
+
+const BOARD_W = 9 * 44 + 4;
 
 function PlayerBar({ handle, rating, clock, isActive, color }: {
   handle: string; rating: number;

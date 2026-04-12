@@ -60,6 +60,7 @@ export interface MatchRoom {
 /** クライアント → サーバー */
 export interface ClientToServerEvents {
   'auth.login': (data: { handle: string }, cb: (res: { ok: boolean; playerId?: string; error?: string }) => void) => void;
+  'auth.setHandle': (data: { handle: string }, cb: (res: { ok: boolean; handle?: string; rating?: number; error?: string }) => void) => void;
   'match.quickstart': (data: { timePreset?: string }, cb: (res: { ok: boolean; matchId?: string; error?: string }) => void) => void;
   'match.move': (data: { matchId: string; move: Move }) => void;
   'match.resign': (data: { matchId: string }) => void;
@@ -113,6 +114,8 @@ export interface ServerToClientEvents {
   'lobby.challenge.declined': (data: { challengeId: string }) => void;
   'chat.message': (data: { matchId: string; sender: string; message: string; timestamp: number }) => void;
   'auth.restored': (data: { handle: string; rating: number; userId: string }) => void;
+  'auth.needsHandle': (data: { userId: string }) => void;
+  'auth.kicked': (data: { reason: string }) => void;
   'review.entered': (data: { matchId: string; board: GameState }) => void;
   'review.snapshot': (data: { matchId: string; color: Color; board: GameState }) => void;
   'review.left': (data: { matchId: string; color: Color }) => void;
@@ -129,4 +132,5 @@ export interface LobbyPlayerInfo {
 export interface InterServerEvents {}
 export interface SocketData {
   player?: Player;
+  pendingUserId?: string;
 }

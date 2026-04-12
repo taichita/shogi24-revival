@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "将棋倶楽部24 Revival",
+  title: "R24将棋道場",
   description: "将棋倶楽部24のUXの芯を残した現代Web道場",
 };
 
