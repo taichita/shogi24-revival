@@ -80,14 +80,19 @@ export interface DbUser {
 }
 
 /** ハンドル名でログイン。なければ新規作成 */
-export function loginOrCreate(socketId: string, handle: string, initialRating = 1500): DbUser {
+export function loginOrCreate(socketId: string, handle: string, initialRating = 1500): DbUser | { error: string } {
   const rows = db.exec('SELECT * FROM users WHERE handle = ?', [handle]);
   if (rows.length > 0 && rows[0].values.length > 0) {
     const r = rows[0].values[0];
-    // 既存ユーザー: socketIdを更新
+    const googleId = r[2] as string | null;
+    // Google認証ユーザーのハンドルは乗っ取り防止のため拒否
+    if (googleId) {
+      return { error: 'このハンドル名はGoogle認証ユーザーが使用中です' };
+    }
+    // 既存レガシーユーザー: socketIdを更新
     db.run('UPDATE users SET id = ? WHERE handle = ?', [socketId, handle]);
     save();
-    return { id: socketId, handle: r[1] as string, rating: r[2] as number, games: r[3] as number, wins: r[4] as number };
+    return { id: socketId, handle: r[1] as string, rating: r[5] as number, games: r[6] as number, wins: r[7] as number };
   }
   db.run('INSERT INTO users (id, handle, rating, games, wins) VALUES (?, ?, ?, 0, 0)', [socketId, handle, initialRating]);
   save();

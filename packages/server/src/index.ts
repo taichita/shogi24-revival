@@ -26,7 +26,7 @@ app.use(cors({ origin: ALLOWED_ORIGINS }));
 
 // ヘルスチェック（Renderスリープ防止用）
 app.get('/', (_req, res) => { res.send('ok'); });
-app.get('/health', (_req, res) => { res.json({ status: 'ok', uptime: process.uptime() }); });
+app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
 
 app.use('/auth', authRouter);
 const httpServer = createServer(app);
@@ -77,9 +77,17 @@ function checkRateLimit(socketId: string, maxPerSec = 10): boolean {
   return entry.count <= maxPerSec;
 }
 
-/** 入力サニタイズ: HTMLタグ除去 */
+/** レート制限マップのクリーンアップ（定期実行） */
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of rateLimits) {
+    if (now > entry.resetAt + 5000) rateLimits.delete(id);
+  }
+}, 30_000);
+
+/** 入力サニタイズ: HTMLタグのみ除去（ReactがJSXで自動エスケープするため最小限） */
 function sanitize(str: string): string {
-  return str.replace(/[<>&"']/g, '').trim();
+  return str.replace(/[<>]/g, '').trim();
 }
 
 const matchManager = new MatchManager();
@@ -302,6 +310,10 @@ io.on('connection', (socket) => {
     // DBからレート読み込み（なければ新規作成）
     const startRating = (initialRating != null && isValidInitialRating(initialRating)) ? initialRating : 1500;
     const dbUser = loginOrCreate(socket.id, cleanHandle, startRating);
+    if ('error' in dbUser) {
+      cb({ ok: false, error: dbUser.error });
+      return;
+    }
     const player: Player = {
       id: socket.id,
       userId: dbUser.id,
@@ -481,6 +493,7 @@ io.on('connection', (socket) => {
 
   // --- 着手 ---
   socket.on('match.move', ({ matchId, move }) => {
+    if (!checkRateLimit(socket.id, 5)) return;
     const result = matchManager.applyMove(matchId, socket.id, move);
     if (!result.ok) {
       socket.emit('match.error', { matchId, message: result.error });
@@ -495,7 +508,7 @@ io.on('connection', (socket) => {
 
   // --- チャット ---
   socket.on('chat.send', ({ matchId, message }) => {
-    if (!checkRateLimit(socket.id, 2)) return;
+    if (!checkRateLimit(socket.id, 1)) return;
     const player = socket.data.player;
     if (!player) return;
     const room = matchManager.getMatch(matchId);
