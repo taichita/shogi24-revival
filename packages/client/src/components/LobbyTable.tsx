@@ -1,6 +1,7 @@
 "use client";
 
 import type { LobbyPlayer, IncomingChallenge } from "@/hooks/useSocket";
+import { ratingToRank } from "@shogi24/engine";
 
 const TIME_LABELS: Record<string, string> = {
   normal: "15分+60秒",
@@ -56,7 +57,7 @@ export function LobbyTable({
           {challenges.map((ch) => (
             <div key={ch.challengeId} style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ flex: 1, fontWeight: "bold", fontSize: 14 }}>
-                {ch.from.handle} (R{ch.from.rating}) から挑戦 — {TIME_LABELS[ch.timePreset] ?? ch.timePreset}
+                {ch.from.handle} ({ratingToRank(ch.from.rating)} R{ch.from.rating}) から挑戦 — {TIME_LABELS[ch.timePreset] ?? ch.timePreset}
               </span>
               <button onClick={() => onAccept(ch.challengeId)} style={actionBtn("#b45309")}>受ける</button>
               <button onClick={() => onDecline(ch.challengeId)} style={actionBtn("#78716c")}>断る</button>
@@ -91,7 +92,7 @@ export function LobbyTable({
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontWeight: "bold", fontSize: 15 }}>
-            {me ? `${me.handle} (R${me.rating})` : ""}
+            {me ? `${me.handle} (${ratingToRank(me.rating)} R${me.rating})` : ""}
           </span>
           <span style={{ flex: 1 }} />
           <span style={{ fontSize: 12, color: "#78716c" }}>持ち時間:</span>
@@ -156,7 +157,7 @@ export function LobbyTable({
               return (
                 <tr key={p.id} style={{ borderBottom: "1px solid #e7e5e4", backgroundColor: "#fafaf9" }}>
                   <td style={td}><span style={{ fontWeight: "bold" }}>{p.handle}</span></td>
-                  <td style={{ ...td, fontFamily: "monospace" }}>{p.rating}</td>
+                  <td style={{ ...td, fontFamily: "monospace" }}>{ratingToRank(p.rating)} R{p.rating}</td>
                   <td style={td}>
                     <span style={{
                       fontSize: 11, padding: "2px 6px", borderRadius: 8,

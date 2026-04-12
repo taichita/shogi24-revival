@@ -80,7 +80,7 @@ export interface DbUser {
 }
 
 /** ハンドル名でログイン。なければ新規作成 */
-export function loginOrCreate(socketId: string, handle: string): DbUser {
+export function loginOrCreate(socketId: string, handle: string, initialRating = 1500): DbUser {
   const rows = db.exec('SELECT * FROM users WHERE handle = ?', [handle]);
   if (rows.length > 0 && rows[0].values.length > 0) {
     const r = rows[0].values[0];
@@ -89,9 +89,9 @@ export function loginOrCreate(socketId: string, handle: string): DbUser {
     save();
     return { id: socketId, handle: r[1] as string, rating: r[2] as number, games: r[3] as number, wins: r[4] as number };
   }
-  db.run('INSERT INTO users (id, handle, rating, games, wins) VALUES (?, ?, 1500, 0, 0)', [socketId, handle]);
+  db.run('INSERT INTO users (id, handle, rating, games, wins) VALUES (?, ?, ?, 0, 0)', [socketId, handle, initialRating]);
   save();
-  return { id: socketId, handle, rating: 1500, games: 0, wins: 0 };
+  return { id: socketId, handle, rating: initialRating, games: 0, wins: 0 };
 }
 
 /** レート更新 */
@@ -132,14 +132,15 @@ export function findOrCreateGoogleUser(googleId: string, displayName: string, av
   return { id, handle: null, googleId, displayName, avatarUrl, rating: 1500, games: 0, wins: 0 };
 }
 
-/** ハンドル名を設定（Google認証ユーザーの初回設定） */
-export function setUserHandle(userId: string, handle: string): { ok: boolean; error?: string } {
+/** ハンドル名と初期レートを設定（Google認証ユーザーの初回設定） */
+export function setUserHandleAndRating(userId: string, handle: string, initialRating = 1500): { ok: boolean; error?: string } {
   // 重複チェック
   const existing = db.exec('SELECT id FROM users WHERE handle = ?', [handle]);
   if (existing.length > 0 && existing[0].values.length > 0) {
     return { ok: false, error: 'このハンドル名は既に使用されています' };
   }
-  db.run('UPDATE users SET handle = ? WHERE id = ?', [handle, userId]);
+  // games=0のユーザーのみレートも変更可能
+  db.run('UPDATE users SET handle = ?, rating = CASE WHEN games = 0 THEN ? ELSE rating END WHERE id = ?', [handle, initialRating, userId]);
   save();
   return { ok: true };
 }

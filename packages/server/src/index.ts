@@ -11,7 +11,8 @@ import { opponent, apply24Rating, createGame, makeMove as engineMakeMove } from 
 import { MatchManager } from './match-manager.js';
 import { MatchQueue } from './queue.js';
 import { Lobby } from './lobby.js';
-import { initDb, loginOrCreate, updateRating, saveMatch, getUserById, setUserHandle } from './db.js';
+import { initDb, loginOrCreate, updateRating, saveMatch, getUserById, setUserHandleAndRating } from './db.js';
+import { isValidInitialRating } from '@shogi24/engine';
 import { authRouter, verifyToken } from './auth.js';
 
 const PORT = Number(process.env.PORT ?? 3025);
@@ -280,7 +281,7 @@ io.on('connection', (socket) => {
   }
 
   // --- ハンドル認証（レガシー / Google未使用時） ---
-  socket.on('auth.login', ({ handle }, cb) => {
+  socket.on('auth.login', ({ handle, initialRating }, cb) => {
     if (!checkRateLimit(socket.id, 3)) {
       cb({ ok: false, error: 'リクエストが多すぎます' });
       return;
@@ -295,7 +296,8 @@ io.on('connection', (socket) => {
       return;
     }
     // DBからレート読み込み（なければ新規作成）
-    const dbUser = loginOrCreate(socket.id, cleanHandle);
+    const startRating = (initialRating != null && isValidInitialRating(initialRating)) ? initialRating : 1500;
+    const dbUser = loginOrCreate(socket.id, cleanHandle, startRating);
     const player: Player = {
       id: socket.id,
       userId: dbUser.id,
@@ -310,7 +312,7 @@ io.on('connection', (socket) => {
   });
 
   // --- ハンドル名設定（Google認証後の初回のみ） ---
-  socket.on('auth.setHandle', ({ handle: rawHandle }, cb) => {
+  socket.on('auth.setHandle', ({ handle: rawHandle, initialRating }, cb) => {
     if (!checkRateLimit(socket.id, 3)) {
       cb({ ok: false, error: 'リクエストが多すぎます' });
       return;
@@ -329,7 +331,8 @@ io.on('connection', (socket) => {
       cb({ ok: false, error: '使用できない文字が含まれています' });
       return;
     }
-    const result = setUserHandle(pendingUserId, cleanHandle);
+    const startRating = (initialRating != null && isValidInitialRating(initialRating)) ? initialRating : 1500;
+    const result = setUserHandleAndRating(pendingUserId, cleanHandle, startRating);
     if (!result.ok) {
       cb({ ok: false, error: result.error });
       return;

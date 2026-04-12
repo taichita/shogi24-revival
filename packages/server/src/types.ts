@@ -59,8 +59,8 @@ export interface MatchRoom {
 
 /** クライアント → サーバー */
 export interface ClientToServerEvents {
-  'auth.login': (data: { handle: string }, cb: (res: { ok: boolean; playerId?: string; error?: string }) => void) => void;
-  'auth.setHandle': (data: { handle: string }, cb: (res: { ok: boolean; handle?: string; rating?: number; error?: string }) => void) => void;
+  'auth.login': (data: { handle: string; initialRating?: number }, cb: (res: { ok: boolean; playerId?: string; error?: string }) => void) => void;
+  'auth.setHandle': (data: { handle: string; initialRating?: number }, cb: (res: { ok: boolean; handle?: string; rating?: number; error?: string }) => void) => void;
   'match.quickstart': (data: { timePreset?: string }, cb: (res: { ok: boolean; matchId?: string; error?: string }) => void) => void;
   'match.move': (data: { matchId: string; move: Move }) => void;
   'match.resign': (data: { matchId: string }) => void;

@@ -5,6 +5,7 @@ import { useSocket } from "@/hooks/useSocket";
 import { OnlineGame } from "@/components/OnlineGame";
 import { LobbyTable } from "@/components/LobbyTable";
 import { ReviewMode } from "@/components/ReviewMode";
+import { getSelectableRanks } from "@shogi24/engine";
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:3025";
 
@@ -32,7 +33,10 @@ export default function OnlinePage() {
   const [loginError, setLoginError] = useState("");
   const [handleInput, setHandleInput] = useState("");
   const [handleError, setHandleError] = useState("");
+  const [selectedRating, setSelectedRating] = useState(1500);
   const [challengeMsg, setChallengeMsg] = useState("");
+
+  const selectableRanks = getSelectableRanks();
 
   // --- 重複ログインで切断された ---
   if (kickedMessage) {
@@ -160,13 +164,6 @@ export default function OnlinePage() {
           <input
             value={handleInput}
             onChange={(e) => setHandleInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && handleInput.trim()) {
-                setHandleName(handleInput.trim()).then((res) => {
-                  if (!res.ok) setHandleError(res.error ?? "設定に失敗しました");
-                });
-              }
-            }}
             placeholder="ハンドル名（20文字以内）"
             maxLength={20}
             style={{
@@ -174,10 +171,28 @@ export default function OnlinePage() {
               border: "1px solid #d6d3d1", width: 240, textAlign: "center",
             }}
           />
+          <label style={{ fontSize: 14, fontWeight: "bold", marginTop: 8 }}>棋力を選択</label>
+          <p style={{ fontSize: 12, color: "#78716c", textAlign: "center" }}>
+            あなたの棋力に近い段級を選んでください
+          </p>
+          <select
+            value={selectedRating}
+            onChange={(e) => setSelectedRating(Number(e.target.value))}
+            style={{
+              padding: "8px 14px", fontSize: 15, borderRadius: 8,
+              border: "1px solid #d6d3d1", width: 240, textAlign: "center",
+            }}
+          >
+            {selectableRanks.map((r) => (
+              <option key={r.rating} value={r.rating}>
+                {r.label}（R{r.rating}）
+              </option>
+            ))}
+          </select>
           <button
             disabled={!handleInput.trim()}
             onClick={() => {
-              setHandleName(handleInput.trim()).then((res) => {
+              setHandleName(handleInput.trim(), selectedRating).then((res) => {
                 if (!res.ok) setHandleError(res.error ?? "設定に失敗しました");
               });
             }}
@@ -216,13 +231,6 @@ export default function OnlinePage() {
           <input
             value={inputHandle}
             onChange={(e) => setInputHandle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && inputHandle.trim()) {
-                login(inputHandle.trim()).then((ok) => {
-                  if (!ok) setLoginError("ログインに失敗しました");
-                });
-              }
-            }}
             placeholder="名前を入力"
             maxLength={20}
             style={{
@@ -230,10 +238,25 @@ export default function OnlinePage() {
               border: "1px solid #d6d3d1", width: 240, textAlign: "center",
             }}
           />
+          <label style={{ fontSize: 14, fontWeight: "bold", marginTop: 4 }}>棋力を選択</label>
+          <select
+            value={selectedRating}
+            onChange={(e) => setSelectedRating(Number(e.target.value))}
+            style={{
+              padding: "8px 14px", fontSize: 15, borderRadius: 8,
+              border: "1px solid #d6d3d1", width: 240, textAlign: "center",
+            }}
+          >
+            {selectableRanks.map((r) => (
+              <option key={r.rating} value={r.rating}>
+                {r.label}（R{r.rating}）
+              </option>
+            ))}
+          </select>
           <button
             disabled={!connected || !inputHandle.trim()}
             onClick={() => {
-              login(inputHandle.trim()).then((ok) => {
+              login(inputHandle.trim(), selectedRating).then((ok) => {
                 if (!ok) setLoginError("ログインに失敗しました");
               });
             }}

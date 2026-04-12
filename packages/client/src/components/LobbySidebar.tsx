@@ -1,6 +1,7 @@
 "use client";
 
 import type { LobbyPlayer } from "@/hooks/useSocket";
+import { ratingToRank } from "@shogi24/engine";
 
 const STATUS_LABELS: Record<string, string> = {
   idle: "待機",
@@ -67,7 +68,7 @@ export function LobbySidebar({ players, myId }: Props) {
               <div style={{ display: "flex", flexDirection: "column" }}>
                 <span style={{ fontWeight: "bold", fontSize: 12 }}>{p.handle}</span>
                 <span style={{ fontSize: 10, color: "#78716c", fontFamily: "monospace" }}>
-                  R{p.rating}
+                  {ratingToRank(p.rating)} R{p.rating}
                 </span>
               </div>
               <span

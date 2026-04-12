@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
-import { findOrCreateGoogleUser, getUserById, setUserHandle, type DbUser } from './db.js';
+import { findOrCreateGoogleUser, getUserById, type DbUser } from './db.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
@@ -72,4 +72,3 @@ export function verifyToken(token: string): DbUser | undefined {
   }
 }
 
-export { setUserHandle };

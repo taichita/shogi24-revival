@@ -13,6 +13,7 @@ import { PromotionDialog } from "./PromotionDialog";
 import { MoveList } from "./MoveList";
 import { LobbySidebar } from "./LobbySidebar";
 import { playMoveSound, playBeep, playEndSound, getBgmEnabled, setBgmEnabled } from "@/lib/sounds";
+import { ratingToRank } from "@shogi24/engine";
 
 type SelectionState =
   | { type: "none" }
@@ -378,7 +379,7 @@ function PlayerBar({ handle, rating, clock, isActive, color }: {
     >
       <span style={{ fontWeight: "bold" }}>
         {symbol} {handle}
-        <span style={{ fontSize: 11, color: "#78716c", marginLeft: 4 }}>R{rating}</span>
+        <span style={{ fontSize: 11, color: "#78716c", marginLeft: 4 }}>{ratingToRank(rating)} R{rating}</span>
       </span>
       {clock && (
         <span

@@ -59,8 +59,8 @@ export interface UseSocketReturn {
   sentChallenges: string[];
   match: OnlineMatchState | null;
   chatMessages: ChatMessage[];
-  login: (handle: string) => Promise<boolean>;
-  setHandleName: (handle: string) => Promise<{ ok: boolean; error?: string }>;
+  login: (handle: string, initialRating?: number) => Promise<boolean>;
+  setHandleName: (handle: string, initialRating?: number) => Promise<{ ok: boolean; error?: string }>;
   quickstart: (timePreset?: string) => Promise<void>;
   sendChallenge: (targetId: string, timePreset: string) => Promise<string | null>;
   acceptChallenge: (challengeId: string) => void;
@@ -238,11 +238,11 @@ export function useSocket(): UseSocketReturn {
     return () => { socket.disconnect(); };
   }, []);
 
-  const login = useCallback(async (h: string): Promise<boolean> => {
+  const login = useCallback(async (h: string, initialRating?: number): Promise<boolean> => {
     const socket = socketRef.current;
     if (!socket) return false;
     return new Promise((resolve) => {
-      socket.emit("auth.login", { handle: h }, (res: { ok: boolean; playerId?: string; error?: string }) => {
+      socket.emit("auth.login", { handle: h, initialRating }, (res: { ok: boolean; playerId?: string; error?: string }) => {
         if (res.ok) {
           setLoggedIn(true);
           setHandle(h);
@@ -255,11 +255,11 @@ export function useSocket(): UseSocketReturn {
     });
   }, []);
 
-  const setHandleName = useCallback(async (h: string): Promise<{ ok: boolean; error?: string }> => {
+  const setHandleName = useCallback(async (h: string, initialRating?: number): Promise<{ ok: boolean; error?: string }> => {
     const socket = socketRef.current;
     if (!socket) return { ok: false, error: '接続されていません' };
     return new Promise((resolve) => {
-      socket.emit("auth.setHandle", { handle: h }, (res: { ok: boolean; handle?: string; rating?: number; error?: string }) => {
+      socket.emit("auth.setHandle", { handle: h, initialRating }, (res: { ok: boolean; handle?: string; rating?: number; error?: string }) => {
         if (res.ok && res.handle) {
           setNeedsHandle(false);
           setLoggedIn(true);

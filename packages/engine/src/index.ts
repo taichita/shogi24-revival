@@ -29,3 +29,5 @@ export {
 
 export type { RatingResult } from './rating.js';
 export { calc24Exchange, apply24Rating } from './rating.js';
+
+export { ratingToRank, getSelectableRanks, isValidInitialRating } from './rank.js';
