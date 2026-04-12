@@ -159,7 +159,7 @@ function addMoveWithPromotion(
   const inPromZoneFrom = isPromotionZone(color, from.row);
   const inPromZoneTo = isPromotionZone(color, to.row);
   const canProm = canPromote(kind) && !piece.promoted && (inPromZoneFrom || inPromZoneTo);
-  const mustProm = mustPromote(kind, color, to.row);
+  const mustProm = !piece.promoted && mustPromote(kind, color, to.row);
 
   if (canProm) {
     // 成る手

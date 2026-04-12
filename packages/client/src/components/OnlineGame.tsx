@@ -182,174 +182,107 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
       <div style={{
         fontSize: 15, fontWeight: "bold", textAlign: "center",
         ...(showEndEffect ? {
-          fontSize: 20,
-          padding: "8px 24px",
-          backgroundColor: "#fef3c7",
-          border: "2px solid #d97706",
-          borderRadius: 10,
+          fontSize: 20, padding: "8px 24px", backgroundColor: "#fef3c7",
+          border: "2px solid #d97706", borderRadius: 10,
           animation: "pulse 0.5s ease-in-out 3",
         } : {}),
       }}>
         {status}
       </div>
 
-      {/* メインエリア: 棋譜 | 持ち駒+盤面+持ち駒 | ロビー */}
-      <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "stretch" }}>
-        {/* 左: 棋譜 */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, width: 180 }}>
-          <MoveList moves={moveHistory} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <button
-              onClick={() => setFlipped((f) => !f)}
-              style={{
-                padding: "4px 12px", fontSize: 12, backgroundColor: "#e7e5e4",
-                borderRadius: 6, border: "none", cursor: "pointer",
-              }}
-            >
-              盤面反転
+      {/* メインエリア: 棋譜 | 盤面 | ロビー */}
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "flex-start" }}>
+
+        {/* 左: 棋譜 + ボタン + チャット */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, width: 180, height: 560, flexShrink: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <MoveList moves={moveHistory} />
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <button onClick={() => setFlipped((f) => !f)}
+              style={{ padding: "3px 8px", fontSize: 11, backgroundColor: "#e7e5e4", borderRadius: 6, border: "none", cursor: "pointer" }}>
+              反転
             </button>
-            <button
-              onClick={() => {
-                const next = !bgmOn;
-                setBgmOn(next);
-                setBgmEnabled(next);
-              }}
-              style={{
-                padding: "4px 12px", fontSize: 12,
-                backgroundColor: bgmOn ? "#dbeafe" : "#e7e5e4",
-                borderRadius: 6, border: bgmOn ? "1px solid #93c5fd" : "none",
-                cursor: "pointer",
-              }}
-            >
+            <button onClick={() => { const next = !bgmOn; setBgmOn(next); setBgmEnabled(next); }}
+              style={{ padding: "3px 8px", fontSize: 11, backgroundColor: bgmOn ? "#dbeafe" : "#e7e5e4", borderRadius: 6, border: bgmOn ? "1px solid #93c5fd" : "none", cursor: "pointer" }}>
               BGM {bgmOn ? "ON" : "OFF"}
             </button>
             {!match.result && (
-              <button
-                onClick={onResign}
-                style={{
-                  padding: "6px 14px", backgroundColor: "#44403c", color: "white",
-                  borderRadius: 8, fontSize: 13, fontWeight: "bold", border: "none", cursor: "pointer",
-                }}
-              >
+              <button onClick={onResign}
+                style={{ padding: "3px 8px", backgroundColor: "#44403c", color: "white", borderRadius: 6, fontSize: 11, fontWeight: "bold", border: "none", cursor: "pointer" }}>
                 投了
               </button>
             )}
           </div>
+          {/* チャット（縦型） */}
+          <div style={{
+            height: 120, flexShrink: 0,
+            backgroundColor: "#fafaf9", border: "1px solid #d6d3d1", borderRadius: 8,
+            padding: 8, display: "flex", flexDirection: "column",
+          }}>
+            <div style={{ flex: 1, overflowY: "auto", fontSize: 12, minHeight: 0 }}>
+              {chatMessages.length === 0 && (
+                <span style={{ color: "#a8a29e", fontSize: 11 }}>チャット</span>
+              )}
+              {chatMessages.map((m, i) => (
+                <div key={i} style={{ marginBottom: 2, wordBreak: "break-word" }}>
+                  <span style={{ fontWeight: m.sender === myHandle ? "bold" : "normal", color: m.sender === myHandle ? "#1c1917" : "#57534e" }}>
+                    {m.sender}:
+                  </span>{" "}
+                  {m.message}
+                </div>
+              ))}
+              <div ref={chatBottomRef} />
+            </div>
+            <div style={{ display: "flex", gap: 3, marginTop: 4 }}>
+              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSendChat(); }}
+                maxLength={200} placeholder="メッセージ..."
+                style={{ flex: 1, padding: "3px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #d6d3d1", outline: "none" }}
+              />
+              <button onClick={handleSendChat}
+                style={{ padding: "3px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #d6d3d1", backgroundColor: "#44403c", color: "#fff", cursor: "pointer" }}>
+                送信
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* 中央: 盤面エリア（持ち駒は対角配置） */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+        {/* 中央: 盤面エリア（固定高さ） */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center", flexShrink: 0 }}>
           {/* 相手プレイヤーバー */}
-          <PlayerBar
-            handle={topPlayer.handle} rating={topPlayer.rating}
-            clock={topClock} isActive={game.turn === topColor && !match.result}
-            color={topColor}
-          />
+          <PlayerBar handle={topPlayer.handle} rating={topPlayer.rating}
+            clock={topClock} isActive={game.turn === topColor && !match.result} color={topColor} />
 
-          {/* 相手持ち駒(左上) + 盤面 + 空白 */}
+          {/* 相手持ち駒(左上) + 盤面 + スペーサー */}
           <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
-            <HandPieces
-              hand={game.hands[topColor]}
-              color={topColor}
-              isActive={false}
-              selection={{ type: "none" }}
-              onSelect={() => {}}
-              flipped={flipped}
-              vertical
-            />
-            <ShogiBoard
-              board={game.board}
+            <div style={{ width: 54 }}>
+              <HandPieces hand={game.hands[topColor]} color={topColor}
+                isActive={false} selection={{ type: "none" }} onSelect={() => {}} flipped={flipped} vertical />
+            </div>
+            <ShogiBoard board={game.board}
               selection={isMyTurn ? selection : { type: "none" }}
-              onCellClick={selectCell}
-              lastMove={lastMove}
-              flipped={flipped}
-            />
-            {/* 右下の自分の持ち駒は下に配置するためスペーサー */}
-            <div style={{ width: 50 }} />
+              onCellClick={selectCell} lastMove={lastMove} flipped={flipped} />
+            <div style={{ width: 54 }} />
           </div>
 
-          {/* 空白 + 盤面なし + 自分持ち駒(右下) */}
-          <div style={{ display: "flex", gap: 6, alignItems: "flex-end", alignSelf: "flex-end" }}>
-            <HandPieces
-              hand={game.hands[botColor]}
-              color={botColor}
-              isActive={isMyTurn && !match.result}
-              selection={selection}
-              onSelect={selectHandPiece}
-              flipped={flipped}
-              vertical
-            />
+          {/* スペーサー + 自分持ち駒(右下) */}
+          <div style={{ display: "flex", gap: 6, alignItems: "flex-start", alignSelf: "stretch" }}>
+            <div style={{ flex: 1 }} />
+            <div style={{ width: 54 }}>
+              <HandPieces hand={game.hands[botColor]} color={botColor}
+                isActive={isMyTurn && !match.result} selection={selection}
+                onSelect={selectHandPiece} flipped={flipped} vertical />
+            </div>
           </div>
 
           {/* 自分プレイヤーバー */}
-          <PlayerBar
-            handle={botPlayer.handle} rating={botPlayer.rating}
-            clock={botClock} isActive={game.turn === botColor && !match.result}
-            color={botColor}
-          />
+          <PlayerBar handle={botPlayer.handle} rating={botPlayer.rating}
+            clock={botClock} isActive={game.turn === botColor && !match.result} color={botColor} />
         </div>
 
         {/* 右: ロビーサイドバー */}
         <LobbySidebar players={lobbyPlayers} myId={myId} />
-      </div>
-
-      {/* 下部: チャットバー */}
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          padding: "8px 12px",
-          backgroundColor: "#fafaf9",
-          border: "1px solid #d6d3d1",
-          borderRadius: 8,
-          alignItems: "center",
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            gap: 6,
-            overflowX: "auto",
-            fontSize: 12,
-            maxHeight: 40,
-            overflowY: "auto",
-          }}
-        >
-          {chatMessages.length === 0 && (
-            <span style={{ color: "#a8a29e", fontSize: 11 }}>チャット</span>
-          )}
-          {chatMessages.slice(-5).map((m, i) => (
-            <span key={i} style={{ whiteSpace: "nowrap" }}>
-              <span style={{ fontWeight: m.sender === myHandle ? "bold" : "normal", color: m.sender === myHandle ? "#1c1917" : "#57534e" }}>
-                {m.sender}:
-              </span>{" "}
-              {m.message}
-            </span>
-          ))}
-          <div ref={chatBottomRef} />
-        </div>
-        <input
-          value={chatInput}
-          onChange={(e) => setChatInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") handleSendChat(); }}
-          maxLength={200}
-          placeholder="メッセージ..."
-          style={{
-            width: 200, padding: "4px 8px", fontSize: 12, borderRadius: 4,
-            border: "1px solid #d6d3d1", outline: "none",
-          }}
-        />
-        <button
-          onClick={handleSendChat}
-          style={{
-            padding: "4px 10px", fontSize: 12, borderRadius: 4,
-            border: "1px solid #d6d3d1", backgroundColor: "#44403c",
-            color: "#fff", cursor: "pointer",
-          }}
-        >
-          送信
-        </button>
       </div>
 
       {promotionPending && <PromotionDialog onConfirm={confirmPromotion} />}
@@ -367,27 +300,19 @@ function PlayerBar({ handle, rating, clock, isActive, color }: {
   const symbol = color === "black" ? "☗" : "☖";
   const low = clock && clock.remainMs <= 10000;
   return (
-    <div
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        width: BOARD_W, padding: "4px 10px",
-        borderRadius: 6,
-        backgroundColor: isActive ? "#fef3c7" : "#f5f5f4",
-        border: isActive ? "2px solid #d97706" : "1px solid #d6d3d1",
-        fontSize: 13,
-      }}
-    >
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      width: BOARD_W, padding: "4px 10px", borderRadius: 6,
+      backgroundColor: isActive ? "#fef3c7" : "#f5f5f4",
+      border: isActive ? "2px solid #d97706" : "1px solid #d6d3d1",
+      fontSize: 13,
+    }}>
       <span style={{ fontWeight: "bold" }}>
         {symbol} {handle}
         <span style={{ fontSize: 11, color: "#78716c", marginLeft: 4 }}>{ratingToRank(rating)} R{rating}</span>
       </span>
       {clock && (
-        <span
-          style={{
-            fontFamily: "monospace", fontSize: 18, fontWeight: "bold",
-            color: low ? "#dc2626" : "#1c1917",
-          }}
-        >
+        <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: "bold", color: low ? "#dc2626" : "#1c1917" }}>
           {formatTime(clock.remainMs)}
           {clock.inByoyomi && <span style={{ fontSize: 10, marginLeft: 3, color: "#78716c" }}>秒読み</span>}
         </span>

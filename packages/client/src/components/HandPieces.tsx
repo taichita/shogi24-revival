@@ -65,7 +65,7 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
                 fontWeight: "bold",
                 cursor: isActive ? "pointer" : "default",
                 opacity: isActive ? 1 : 0.5,
-                backgroundColor: selected ? "rgba(217, 176, 56, 0.45)" : "#e7e5e4",
+                backgroundColor: selected ? "rgba(217, 176, 56, 0.45)" : "#dbb87a",
                 border: selected ? "2px solid #d97706" : "1px solid #d6d3d1",
                 transform: shouldRotate ? "rotate(180deg)" : undefined,
               }}
@@ -120,7 +120,7 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
               fontWeight: "bold",
               cursor: isActive ? "pointer" : "default",
               opacity: isActive ? 1 : 0.5,
-              backgroundColor: selected ? "rgba(217, 176, 56, 0.45)" : "#e7e5e4",
+              backgroundColor: selected ? "rgba(217, 176, 56, 0.45)" : "#dbb87a",
               border: selected ? "2px solid #d97706" : "1px solid #d6d3d1",
               transform: shouldRotate ? "rotate(180deg)" : undefined,
             }}
