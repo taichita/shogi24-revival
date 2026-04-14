@@ -14,8 +14,8 @@ export function calc24Exchange(winnerR: number, loserR: number): number {
 
 /** 通常レーティング更新 */
 export function apply24Rating(winnerR: number, loserR: number): RatingResult {
-  // 2600以上 × 400点差超 → レーティング計算なし
-  if ((winnerR >= 2600 || loserR >= 2600) && Math.abs(winnerR - loserR) > 400) {
+  // 400点差超 → レーティング変動なし
+  if (Math.abs(winnerR - loserR) > 400) {
     return { nextWinner: winnerR, nextLoser: loserR, exchanged: 0, rated: false };
   }
 
