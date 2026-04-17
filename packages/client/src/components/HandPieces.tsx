@@ -58,8 +58,10 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: 1,
-                padding: "4px 6px",
+                padding: "6px 8px",
+                minWidth: 40, minHeight: 40,
                 borderRadius: 6,
                 fontSize: 18,
                 fontWeight: "bold",
@@ -68,6 +70,9 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
                 backgroundColor: selected ? "rgba(217, 176, 56, 0.45)" : "#dbb87a",
                 border: selected ? "2px solid #d97706" : "1px solid #d6d3d1",
                 transform: shouldRotate ? "rotate(180deg)" : undefined,
+                touchAction: "manipulation",
+                WebkitTapHighlightColor: "rgba(0,0,0,0)",
+                userSelect: "none",
               }}
             >
               <span>{handPieceLabel(kind)}</span>
@@ -113,8 +118,10 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: 2,
-              padding: "4px 10px",
+              padding: "8px 12px",
+              minWidth: 44, minHeight: 44,
               borderRadius: 6,
               fontSize: 20,
               fontWeight: "bold",
@@ -123,6 +130,9 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
               backgroundColor: selected ? "rgba(217, 176, 56, 0.45)" : "#dbb87a",
               border: selected ? "2px solid #d97706" : "1px solid #d6d3d1",
               transform: shouldRotate ? "rotate(180deg)" : undefined,
+              touchAction: "manipulation",
+              WebkitTapHighlightColor: "rgba(0,0,0,0)",
+              userSelect: "none",
             }}
           >
             <span>{handPieceLabel(kind)}</span>

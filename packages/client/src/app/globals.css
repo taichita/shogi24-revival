@@ -11,6 +11,12 @@ body {
   font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Meiryo", sans-serif;
 }
 
+/* ボタンのタップ動作: ダブルタップ拡大を無効化、タップハイライトを透明化 */
+button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.05); }

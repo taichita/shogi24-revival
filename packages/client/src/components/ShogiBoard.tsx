@@ -90,6 +90,9 @@ export function ShogiBoard({ board, selection, onCellClick, lastMove, flipped = 
                     cursor: "pointer",
                     padding: 0,
                     position: "relative",
+                    touchAction: "manipulation",
+                    WebkitTapHighlightColor: "rgba(0,0,0,0)",
+                    userSelect: "none",
                   }}
                 >
                   {piece && (
