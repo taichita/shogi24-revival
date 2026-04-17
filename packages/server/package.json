@@ -10,19 +10,18 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.2",
     "@shogi24/engine": "*",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.3",
-    "socket.io": "^4.8.0",
-    "sql.js": "^1.14.1"
+    "socket.io": "^4.8.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/sql.js": "^1.4.11",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }

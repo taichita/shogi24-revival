@@ -195,7 +195,7 @@ function broadcastLobby(): void {
 }
 
 /** 対局終了時のレート更新＋ロビー状態戻し */
-function handleMatchEnd(matchId: string, result: { winner: string | null; reason: string }): void {
+async function handleMatchEnd(matchId: string, result: { winner: string | null; reason: string }): Promise<void> {
   const room = matchManager.getMatch(matchId);
   if (!room) return;
 
@@ -225,13 +225,13 @@ function handleMatchEnd(matchId: string, result: { winner: string | null; reason
       // DB永続化 (persistent userId を使用)
       const winnerUserId = winnerIsBlack ? room.black.userId : room.white.userId;
       const loserUserId = winnerIsBlack ? room.white.userId : room.black.userId;
-      updateRating(winnerUserId, rr.nextWinner, true);
-      updateRating(loserUserId, rr.nextLoser, false);
+      await updateRating(winnerUserId, rr.nextWinner, true);
+      await updateRating(loserUserId, rr.nextLoser, false);
 
       console.log(`[rating] ${winnerIsBlack ? room.black.handle : room.white.handle} ${winnerR}→${rr.nextWinner} (+${rr.exchanged}), ${winnerIsBlack ? room.white.handle : room.black.handle} ${loserR}→${rr.nextLoser} (-${rr.exchanged})`);
 
       // 対局記録保存
-      saveMatch({
+      await saveMatch({
         id: matchId,
         blackId: room.black.userId, whiteId: room.white.userId,
         winnerId: winnerUserId, result: result.reason,
@@ -257,7 +257,8 @@ io.on('connection', (socket) => {
   // --- JWT自動認証 ---
   const token = socket.handshake.auth?.token as string | undefined;
   if (token) {
-    const dbUser = verifyToken(token);
+    (async () => {
+    const dbUser = await verifyToken(token);
     if (dbUser) {
       // 重複ログイン防止: 同じuserIdの既存接続を切断
       const existingSocketId = userIdToSocketId.get(dbUser.id);
@@ -290,10 +291,11 @@ io.on('connection', (socket) => {
         broadcastLobby();
       }
     }
+    })();
   }
 
   // --- ハンドル認証（レガシー / Google未使用時） ---
-  socket.on('auth.login', ({ handle, initialRating }, cb) => {
+  socket.on('auth.login', async ({ handle, initialRating }, cb) => {
     if (!checkRateLimit(socket.id, 3)) {
       cb({ ok: false, error: 'リクエストが多すぎます' });
       return;
@@ -309,7 +311,7 @@ io.on('connection', (socket) => {
     }
     // DBからレート読み込み（なければ新規作成）
     const startRating = (initialRating != null && isValidInitialRating(initialRating)) ? initialRating : 1500;
-    const dbUser = loginOrCreate(socket.id, cleanHandle, startRating);
+    const dbUser = await loginOrCreate(socket.id, cleanHandle, startRating);
     if ('error' in dbUser) {
       cb({ ok: false, error: dbUser.error });
       return;
@@ -328,7 +330,7 @@ io.on('connection', (socket) => {
   });
 
   // --- ハンドル名設定（Google認証後の初回のみ） ---
-  socket.on('auth.setHandle', ({ handle: rawHandle, initialRating }, cb) => {
+  socket.on('auth.setHandle', async ({ handle: rawHandle, initialRating }, cb) => {
     if (!checkRateLimit(socket.id, 3)) {
       cb({ ok: false, error: 'リクエストが多すぎます' });
       return;
@@ -348,12 +350,12 @@ io.on('connection', (socket) => {
       return;
     }
     const startRating = (initialRating != null && isValidInitialRating(initialRating)) ? initialRating : 1500;
-    const result = setUserHandleAndRating(pendingUserId, cleanHandle, startRating);
+    const result = await setUserHandleAndRating(pendingUserId, cleanHandle, startRating);
     if (!result.ok) {
       cb({ ok: false, error: result.error });
       return;
     }
-    const dbUser = getUserById(pendingUserId);
+    const dbUser = await getUserById(pendingUserId);
     if (!dbUser || !dbUser.handle) {
       cb({ ok: false, error: '設定に失敗しました' });
       return;

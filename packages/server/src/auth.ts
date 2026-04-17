@@ -46,7 +46,7 @@ authRouter.get('/google/callback', async (req, res) => {
     const displayName = payload.name ?? payload.email ?? 'Player';
     const avatarUrl = payload.picture;
 
-    const user = findOrCreateGoogleUser(googleId, displayName, avatarUrl);
+    const user = await findOrCreateGoogleUser(googleId, displayName, avatarUrl);
 
     const needsHandle = !user.handle;
     const token = jwt.sign(
@@ -63,10 +63,10 @@ authRouter.get('/google/callback', async (req, res) => {
 });
 
 /** JWTを検証してDbUserを返す */
-export function verifyToken(token: string): DbUser | undefined {
+export async function verifyToken(token: string): Promise<DbUser | undefined> {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; handle: string | null };
-    return getUserById(decoded.userId);
+    return await getUserById(decoded.userId);
   } catch {
     return undefined;
   }
