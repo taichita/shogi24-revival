@@ -58,8 +58,11 @@ function playFile(path: string, fallback: () => void): void {
 
 let bgmAudio: HTMLAudioElement | null = null;
 let bgmEnabled = false;
+let bgmTrack = 1;
 
 const BGM_STORAGE_KEY = "r24_bgm_enabled";
+const BGM_TRACK_KEY = "r24_bgm_track";
+const BGM_VOLUME = 0.06;
 
 /** BGMの初期状態をlocalStorageから読み込む */
 export function getBgmEnabled(): boolean {
@@ -68,9 +71,31 @@ export function getBgmEnabled(): boolean {
   return stored === "true";
 }
 
+/** 選択中のBGMトラック番号（1, 2, 3） */
+export function getBgmTrack(): number {
+  if (typeof window === "undefined") return 1;
+  const stored = localStorage.getItem(BGM_TRACK_KEY);
+  const n = stored ? parseInt(stored, 10) : 1;
+  return (n >= 1 && n <= 3) ? n : 1;
+}
+
+/** BGMトラックを変更 */
+export function setBgmTrack(track: number): void {
+  bgmTrack = track;
+  if (typeof window !== "undefined") {
+    localStorage.setItem(BGM_TRACK_KEY, String(track));
+  }
+  if (bgmEnabled) {
+    stopBgm();
+    bgmAudio = null;
+    startBgm();
+  }
+}
+
 /** BGMのオンオフを切り替える */
 export function setBgmEnabled(enabled: boolean): void {
   bgmEnabled = enabled;
+  bgmTrack = getBgmTrack();
   if (typeof window !== "undefined") {
     localStorage.setItem(BGM_STORAGE_KEY, String(enabled));
   }
@@ -86,9 +111,18 @@ function startBgm(): void {
     bgmAudio.play().catch(() => {});
     return;
   }
-  bgmAudio = new Audio("/sounds/bgm.mp3");
+  // bgm-1.mp3 / bgm-2.mp3 / bgm-3.mp3 を優先、無ければ bgm.mp3 にフォールバック
+  const src = `/sounds/bgm-${bgmTrack}.mp3`;
+  bgmAudio = new Audio(src);
   bgmAudio.loop = true;
-  bgmAudio.volume = 0.1;
+  bgmAudio.volume = BGM_VOLUME;
+  bgmAudio.addEventListener("error", () => {
+    // フォールバック: bgm.mp3
+    bgmAudio = new Audio("/sounds/bgm.mp3");
+    bgmAudio.loop = true;
+    bgmAudio.volume = BGM_VOLUME;
+    bgmAudio.play().catch(() => {});
+  }, { once: true });
   bgmAudio.play().catch(() => {});
 }
 

@@ -5,7 +5,10 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.resolve(__dirname, '..', 'data');
+// DATA_DIR は環境変数で上書き可能（例: Renderのpersistent diskを /data にマウントして DATA_DIR=/data を設定）
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.resolve(__dirname, '..', 'data');
 const DB_PATH = path.resolve(DATA_DIR, 'shogi24.db');
 
 mkdirSync(DATA_DIR, { recursive: true });

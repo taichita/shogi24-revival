@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { LobbyPlayer, IncomingChallenge } from "@/hooks/useSocket";
 import { ratingToRank } from "@shogi24/engine";
 
@@ -46,6 +47,7 @@ export function LobbyTable({
   const others = players.filter((p) => p.id !== myId);
   const me = players.find((p) => p.id === myId);
   const myStatus = me?.status ?? "resting";
+  const [challengeTargetId, setChallengeTargetId] = useState<string | null>(null);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 720 }}>
@@ -144,7 +146,7 @@ export function LobbyTable({
               <th style={th}>レート</th>
               <th style={th}>状態</th>
               <th style={th}>持ち時間</th>
-              <th style={{ ...th, width: 80 }}></th>
+              <th style={{ ...th, width: 240 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -169,13 +171,45 @@ export function LobbyTable({
                   </td>
                   <td style={{ ...td, fontSize: 12 }}>{TIME_LABELS[p.preferredTime] ?? p.preferredTime}</td>
                   <td style={td}>
-                    {p.status === "idle" && (
+                    {p.status === "idle" && challengeTargetId !== p.id && (
                       <button
-                        onClick={() => onChallenge(p.id, p.preferredTime)}
+                        onClick={() => setChallengeTargetId(p.id)}
                         style={actionBtn("#44403c")}
                       >
                         挑戦
                       </button>
+                    )}
+                    {p.status === "idle" && challengeTargetId === p.id && (
+                      <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                        {(Object.keys(TIME_LABELS) as (keyof typeof TIME_LABELS)[]).map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() => {
+                              onChallenge(p.id, preset);
+                              setChallengeTargetId(null);
+                            }}
+                            style={{
+                              padding: "3px 6px", fontSize: 10, borderRadius: 4,
+                              border: "1px solid #d6d3d1",
+                              backgroundColor: preset === p.preferredTime ? "#fef3c7" : "#fff",
+                              cursor: "pointer",
+                            }}
+                            title={`${TIME_LABELS[preset]}で挑戦`}
+                          >
+                            {TIME_LABELS[preset]}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setChallengeTargetId(null)}
+                          style={{
+                            padding: "3px 6px", fontSize: 10, borderRadius: 4,
+                            border: "1px solid #d6d3d1", backgroundColor: "#f5f5f4",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
                     )}
                     {p.status === "playing" && p.matchId && (
                       <button

@@ -12,10 +12,10 @@ export function MoveList({ moves, collapsedMax = 10 }: Props) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  // 新しい手が来たら自動で折りたたみに戻す（展開中に手が進んだら）
+  // 新しい手が来たら自動で下までスクロール（親の内部スクロールのみ、ページ全体はスクロールしない）
   useEffect(() => {
     if (!expanded) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
     }
   }, [moves.length, expanded]);
 

@@ -19,7 +19,7 @@ export function ChatPanel({ messages, onSend, myHandle }: Props) {
   const [input, setInput] = useState("");
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   }, [messages.length]);
 
   const handleSend = () => {

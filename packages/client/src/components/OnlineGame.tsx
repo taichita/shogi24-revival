@@ -12,7 +12,11 @@ import { HandPieces } from "./HandPieces";
 import { PromotionDialog } from "./PromotionDialog";
 import { MoveList } from "./MoveList";
 import { LobbySidebar } from "./LobbySidebar";
-import { playMoveSound, playBeep, playEndSound, getBgmEnabled, setBgmEnabled } from "@/lib/sounds";
+import {
+  playMoveSound, playBeep, playEndSound,
+  getBgmEnabled, setBgmEnabled,
+  getBgmTrack, setBgmTrack,
+} from "@/lib/sounds";
 import { ratingToRank } from "@shogi24/engine";
 
 type SelectionState =
@@ -33,11 +37,26 @@ interface Props {
   myId: string | null;
 }
 
+const CELL = 44;
+const BOARD_W = 9 * CELL + 4;
+const BOARD_H = 9 * CELL + 4;
+
 function formatTime(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
   return `${min}:${sec.toString().padStart(2, "0")}`;
+}
+
+/** 画面幅を監視 */
+function useViewportWidth() {
+  const [w, setW] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1024);
+  useEffect(() => {
+    const onResize = () => setW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return w;
 }
 
 export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, myHandle, lobbyPlayers, myId }: Props) {
@@ -47,9 +66,13 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
   const [chatInput, setChatInput] = useState("");
   const [showEndEffect, setShowEndEffect] = useState(false);
   const [bgmOn, setBgmOn] = useState(() => getBgmEnabled());
+  const [bgmTrackState, setBgmTrackState] = useState(() => getBgmTrack());
   const prevMoveCount = useRef(0);
   const prevResult = useRef<boolean>(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  const viewportW = useViewportWidth();
+  const isNarrow = viewportW < 900; // モバイル判定: ロビーサイドバーを非表示にする閾値
 
   const game = match.game;
   const myColor = match.myColor;
@@ -85,9 +108,9 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
     }
   }, [match.result]);
 
-  // チャット自動スクロール
+  // チャット自動スクロール（ページ全体はスクロールしない）
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   }, [chatMessages.length]);
 
   const status = useMemo(() => {
@@ -190,12 +213,18 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
         {status}
       </div>
 
-      {/* メインエリア: 棋譜 | 盤面 | ロビー */}
-      <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "flex-start" }}>
+      {/* メインエリア */}
+      <div style={{
+        display: "flex", gap: 10, justifyContent: "center",
+        alignItems: "flex-start", flexWrap: "wrap",
+      }}>
 
         {/* 左: 棋譜 + ボタン + チャット */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, width: 180, height: 560, flexShrink: 0 }}>
-          <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <div style={{
+          display: "flex", flexDirection: "column", gap: 6,
+          width: 180, height: BOARD_H + 70, flexShrink: 0,
+        }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex" }}>
             <MoveList moves={moveHistory} />
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -207,6 +236,21 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
               style={{ padding: "3px 8px", fontSize: 11, backgroundColor: bgmOn ? "#dbeafe" : "#e7e5e4", borderRadius: 6, border: bgmOn ? "1px solid #93c5fd" : "none", cursor: "pointer" }}>
               BGM {bgmOn ? "ON" : "OFF"}
             </button>
+            {bgmOn && (
+              <select
+                value={bgmTrackState}
+                onChange={(e) => {
+                  const t = Number(e.target.value);
+                  setBgmTrackState(t);
+                  setBgmTrack(t);
+                }}
+                style={{ fontSize: 11, padding: "2px 4px", borderRadius: 6, border: "1px solid #d6d3d1" }}
+              >
+                <option value={1}>BGM 1</option>
+                <option value={2}>BGM 2</option>
+                <option value={3}>BGM 3</option>
+              </select>
+            )}
             {!match.result && (
               <button onClick={onResign}
                 style={{ padding: "3px 8px", backgroundColor: "#44403c", color: "white", borderRadius: 6, fontSize: 11, fontWeight: "bold", border: "none", cursor: "pointer" }}>
@@ -234,42 +278,58 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
               ))}
               <div ref={chatBottomRef} />
             </div>
-            <div style={{ display: "flex", gap: 3, marginTop: 4 }}>
-              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleSendChat(); }}
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleSendChat(); }}
+              style={{ display: "flex", gap: 3, marginTop: 4 }}
+            >
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
                 maxLength={200} placeholder="メッセージ..."
-                style={{ flex: 1, padding: "3px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #d6d3d1", outline: "none" }}
+                autoComplete="off"
+                enterKeyHint="send"
+                style={{ flex: 1, padding: "3px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #d6d3d1", outline: "none", minWidth: 0 }}
               />
-              <button onClick={handleSendChat}
+              <button type="submit"
                 style={{ padding: "3px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #d6d3d1", backgroundColor: "#44403c", color: "#fff", cursor: "pointer" }}>
                 送信
               </button>
-            </div>
+            </form>
           </div>
         </div>
 
-        {/* 中央: 盤面エリア（固定高さ） */}
+        {/* 中央: 盤面 + 持ち駒（absolute positioning で盤の角に配置） */}
         <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center", flexShrink: 0 }}>
           {/* 相手プレイヤーバー */}
           <PlayerBar handle={topPlayer.handle} rating={topPlayer.rating}
             clock={topClock} isActive={game.turn === topColor && !match.result} color={topColor} />
 
-          {/* 相手持ち駒(左上) + 盤面 + スペーサー */}
-          <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
-            <div style={{ width: 54 }}>
+          {/* 盤面と持ち駒（持ち駒は盤の角に absolute 配置、盤縦幅に収まる） */}
+          <div style={{
+            position: "relative",
+            width: BOARD_W + 2 * (54 + 8),
+            height: BOARD_H + 40, // ラベル分の余白
+          }}>
+            {/* 相手持ち駒(左上) */}
+            <div style={{
+              position: "absolute", left: 0, top: 20,
+              maxHeight: BOARD_H, overflowY: "auto",
+            }}>
               <HandPieces hand={game.hands[topColor]} color={topColor}
-                isActive={false} selection={{ type: "none" }} onSelect={() => {}} flipped={flipped} vertical />
+                isActive={false} selection={{ type: "none" }} onSelect={() => {}}
+                flipped={flipped} vertical />
             </div>
-            <ShogiBoard board={game.board}
-              selection={isMyTurn ? selection : { type: "none" }}
-              onCellClick={selectCell} lastMove={lastMove} flipped={flipped} />
-            <div style={{ width: 54 }} />
-          </div>
-
-          {/* スペーサー + 自分持ち駒(右下) */}
-          <div style={{ display: "flex", gap: 6, alignItems: "flex-start", alignSelf: "stretch" }}>
-            <div style={{ flex: 1 }} />
-            <div style={{ width: 54 }}>
+            {/* 盤（中央） */}
+            <div style={{ position: "absolute", left: 54 + 8, top: 0 }}>
+              <ShogiBoard board={game.board}
+                selection={isMyTurn ? selection : { type: "none" }}
+                onCellClick={selectCell} lastMove={lastMove} flipped={flipped} />
+            </div>
+            {/* 自分持ち駒(右下) */}
+            <div style={{
+              position: "absolute", right: 0, bottom: 0,
+              maxHeight: BOARD_H, overflowY: "auto",
+            }}>
               <HandPieces hand={game.hands[botColor]} color={botColor}
                 isActive={isMyTurn && !match.result} selection={selection}
                 onSelect={selectHandPiece} flipped={flipped} vertical />
@@ -281,16 +341,14 @@ export function OnlineGame({ match, onMove, onResign, chatMessages, onSendChat, 
             clock={botClock} isActive={game.turn === botColor && !match.result} color={botColor} />
         </div>
 
-        {/* 右: ロビーサイドバー */}
-        <LobbySidebar players={lobbyPlayers} myId={myId} />
+        {/* 右: ロビーサイドバー（狭い画面では非表示） */}
+        {!isNarrow && <LobbySidebar players={lobbyPlayers} myId={myId} />}
       </div>
 
       {promotionPending && <PromotionDialog onConfirm={confirmPromotion} />}
     </div>
   );
 }
-
-const BOARD_W = 9 * 44 + 4;
 
 function PlayerBar({ handle, rating, clock, isActive, color }: {
   handle: string; rating: number;
