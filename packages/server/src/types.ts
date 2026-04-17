@@ -72,6 +72,7 @@ export interface ClientToServerEvents {
   'lobby.challenge.cancel': (data: { challengeId: string }) => void;
   'match.spectate': (data: { matchId: string }, cb: (res: { ok: boolean; error?: string }) => void) => void;
   'match.spectate.leave': (data: { matchId: string }) => void;
+  'match.claimWin': (data: { matchId: string }, cb: (res: { ok: boolean; error?: string }) => void) => void;
   'chat.send': (data: { matchId: string; message: string }) => void;
   'review.enter': (data: { matchId: string }) => void;
   'review.move': (data: { matchId: string; move: Move }) => void;

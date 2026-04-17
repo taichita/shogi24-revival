@@ -537,6 +537,34 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- 相手切断時の勝ち主張 ---
+  socket.on('match.claimWin', ({ matchId }, cb) => {
+    const room = matchManager.getMatch(matchId);
+    if (!room) { cb({ ok: false, error: '対局が見つかりません' }); return; }
+    if (room.game.result) { cb({ ok: false, error: '対局は既に終了しています' }); return; }
+
+    const color = matchManager.getPlayerColor(room, socket.id);
+    if (!color) { cb({ ok: false, error: '対局のプレイヤーではありません' }); return; }
+
+    const oppId = color === 'black' ? room.white.id : room.black.id;
+    const oppSocket = io.sockets.sockets.get(oppId);
+
+    // 相手がまだ接続中なら却下
+    if (oppSocket && oppSocket.connected) {
+      cb({ ok: false, error: '相手はまだ接続中です。投了は「投了」ボタンから行ってください' });
+      return;
+    }
+
+    // 相手切断確定 → 自分の勝ち
+    const result = { winner: color, reason: 'disconnect' as const };
+    room.game = { ...room.game, result };
+    if (room.tickTimer) { clearInterval(room.tickTimer); room.tickTimer = undefined; }
+    io.to(matchId).emit('match.result', { matchId, result, clock: room.clock });
+    handleMatchEnd(matchId, result);
+    cb({ ok: true });
+    console.log(`[claimWin] ${socket.data.player?.handle} won by opponent disconnect (${matchId})`);
+  });
+
   // --- 観戦 ---
   socket.on('match.spectate', ({ matchId }, cb) => {
     const player = socket.data.player;

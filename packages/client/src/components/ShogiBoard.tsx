@@ -10,13 +10,15 @@ interface Props {
   onCellClick: (pos: Pos) => void;
   lastMove?: Move;
   flipped?: boolean;
+  cellSize?: number;
 }
 
-const CELL = 44;
+const DEFAULT_CELL = 44;
 const COL_LABELS = ["９", "８", "７", "６", "５", "４", "３", "２", "１"];
 const ROW_LABELS = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
 
-export function ShogiBoard({ board, selection, onCellClick, lastMove, flipped = false }: Props) {
+export function ShogiBoard({ board, selection, onCellClick, lastMove, flipped = false, cellSize = DEFAULT_CELL }: Props) {
+  const CELL = cellSize;
   const highlightSet = new Set<string>();
   if (selection.type === "piece" || selection.type === "drop") {
     for (const m of selection.moves) {
@@ -93,7 +95,7 @@ export function ShogiBoard({ board, selection, onCellClick, lastMove, flipped = 
                   {piece && (
                     <span
                       style={{
-                        fontSize: 22,
+                        fontSize: Math.round(CELL * 0.5),
                         fontWeight: "bold",
                         lineHeight: 1,
                         transform: (flipped ? piece.color === "black" : piece.color === "white") ? "rotate(180deg)" : undefined,

@@ -16,7 +16,7 @@ export default function OnlinePage() {
     lobbyPlayers, challenges, sentChallenges, match, chatMessages,
     login, setHandleName, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge,
     spectating, spectateMatch, leaveSpectate,
-    sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
+    sendMove, sendResign, claimWin, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
     enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,
   } = useSocket();
@@ -99,6 +99,7 @@ export default function OnlinePage() {
           <OnlineGame
             match={match} onMove={spectating ? () => {} : sendMove}
             onResign={spectating ? () => {} : sendResign}
+            onClaimWin={spectating ? undefined : claimWin}
             chatMessages={chatMessages} onSendChat={sendChat}
             myHandle={handle} lobbyPlayers={lobbyPlayers} myId={myId}
           />

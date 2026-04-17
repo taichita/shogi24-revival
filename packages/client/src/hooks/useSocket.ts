@@ -69,6 +69,7 @@ export interface UseSocketReturn {
   cancelChallenge: (challengeId: string) => void;
   sendMove: (move: Move) => void;
   sendResign: () => void;
+  claimWin: () => Promise<string | null>;
   sendChat: (message: string) => void;
   backToLobby: () => void;
   spectating: boolean;
@@ -359,6 +360,16 @@ export function useSocket(): UseSocketReturn {
     socket.emit("match.resign", { matchId: match.matchId });
   }, [match]);
 
+  const claimWin = useCallback(async (): Promise<string | null> => {
+    const socket = socketRef.current;
+    if (!socket || !match) return "接続されていません";
+    return new Promise((resolve) => {
+      socket.emit("match.claimWin", { matchId: match.matchId }, (res: { ok: boolean; error?: string }) => {
+        resolve(res.ok ? null : (res.error ?? "勝ち主張に失敗しました"));
+      });
+    });
+  }, [match]);
+
   const sendChat = useCallback((message: string) => {
     const socket = socketRef.current;
     if (!socket || !match) return;
@@ -453,7 +464,7 @@ export function useSocket(): UseSocketReturn {
     lobbyPlayers, challenges, sentChallenges, match, chatMessages,
     login, setHandleName, quickstart, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge,
     spectating, spectateMatch, leaveSpectate,
-    sendMove, sendResign, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
+    sendMove, sendResign, claimWin, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
     enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,
   };
