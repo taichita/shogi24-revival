@@ -12,18 +12,28 @@ interface Props {
   onSelect: (kind: DroppableKind) => void;
   flipped?: boolean;
   vertical?: boolean;
+  cellSize?: number;
 }
 
 const DISPLAY_ORDER: DroppableKind[] = [
   "rook", "bishop", "gold", "silver", "knight", "lance", "pawn",
 ];
 
-export function HandPieces({ hand, color, isActive, selection, onSelect, flipped = false, vertical = false }: Props) {
-  // flipped時: 相手の駒(上)が回転、自分の駒(下)が正位置
+export function HandPieces({
+  hand, color, isActive, selection, onSelect,
+  flipped = false, vertical = false, cellSize = 44,
+}: Props) {
   const shouldRotate = flipped ? color === "black" : color === "white";
   const isWhite = color === "white";
   const selectedKind = selection.type === "drop" ? selection.kind : null;
   const pieces = DISPLAY_ORDER.filter((k) => (hand[k] ?? 0) > 0);
+
+  // サイズをセルサイズに比例させる（盤と揃える）
+  const trayPad = Math.max(2, Math.round(cellSize * 0.08));
+  const pieceSize = cellSize - 2;
+  const pieceFont = Math.round(cellSize * 0.48);
+  const countFont = Math.round(cellSize * 0.26);
+  const labelFont = Math.max(9, Math.round(cellSize * 0.24));
 
   if (vertical) {
     return (
@@ -32,19 +42,23 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 4,
-          padding: "8px 6px",
-          minWidth: 54,
-          borderRadius: 8,
-          border: "2px solid #92400e",
-          backgroundColor: "#fffbeb",
+          gap: 2,
+          padding: `${trayPad}px ${trayPad}px`,
+          width: cellSize + 6,
+          borderRadius: 4,
+          border: "1px solid #a16207",
+          backgroundColor: "#fef3c7",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
         }}
       >
-        <span style={{ fontSize: 11, color: "#78716c", writingMode: "vertical-rl" }}>
-          {isWhite ? "☖後手" : "☗先手"}
+        <span style={{
+          fontSize: labelFont, color: "#92400e", fontWeight: "bold",
+          writingMode: "vertical-rl", marginBottom: 2,
+        }}>
+          {isWhite ? "☖後" : "☗先"}
         </span>
         {pieces.length === 0 && (
-          <span style={{ fontSize: 10, color: "#a8a29e" }}>なし</span>
+          <span style={{ fontSize: labelFont, color: "#a16207" }}>—</span>
         )}
         {pieces.map((kind) => {
           const count = hand[kind] ?? 0;
@@ -59,25 +73,34 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 1,
-                padding: "6px 8px",
-                minWidth: 40, minHeight: 40,
-                borderRadius: 6,
-                fontSize: 18,
+                gap: 0,
+                padding: 0,
+                width: pieceSize,
+                height: pieceSize,
+                borderRadius: 3,
+                fontSize: pieceFont,
                 fontWeight: "bold",
+                lineHeight: 1,
                 cursor: isActive ? "pointer" : "default",
-                opacity: isActive ? 1 : 0.5,
-                backgroundColor: selected ? "rgba(217, 176, 56, 0.45)" : "#dbb87a",
-                border: selected ? "2px solid #d97706" : "1px solid #d6d3d1",
+                opacity: isActive ? 1 : 0.6,
+                backgroundColor: selected ? "rgba(217, 119, 6, 0.35)" : "#dbb87a",
+                border: selected ? "2px solid #b45309" : "1px solid #a16207",
                 transform: shouldRotate ? "rotate(180deg)" : undefined,
                 touchAction: "manipulation",
                 WebkitTapHighlightColor: "rgba(0,0,0,0)",
                 userSelect: "none",
+                position: "relative",
               }}
             >
               <span>{handPieceLabel(kind)}</span>
               {count > 1 && (
-                <span style={{ fontSize: 10, color: "#57534e" }}>{count}</span>
+                <span style={{
+                  position: "absolute", right: 1, bottom: -2,
+                  fontSize: countFont, color: "#57534e", fontWeight: "bold",
+                  lineHeight: 1, transform: shouldRotate ? "rotate(180deg)" : undefined,
+                }}>
+                  {count}
+                </span>
               )}
             </button>
           );
@@ -86,26 +109,36 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
     );
   }
 
+  // 横並び: 盤幅と揃える
+  const boardW = 9 * cellSize + 4;
+  const trayH = cellSize + trayPad * 2;
+
   return (
     <div
       style={{
         display: "flex",
         flexDirection: isWhite ? "row-reverse" : "row",
         alignItems: "center",
-        gap: 6,
-        padding: "8px 12px",
-        minHeight: 44,
-        borderRadius: 8,
-        border: "2px solid #92400e",
-        backgroundColor: "#fffbeb",
-        width: 9 * 44 + 4,
+        gap: 4,
+        padding: `${trayPad}px ${trayPad + 4}px`,
+        height: trayH,
+        width: boardW,
+        borderRadius: 4,
+        border: "1px solid #a16207",
+        backgroundColor: "#fef3c7",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+        boxSizing: "border-box",
+        overflow: "hidden",
       }}
     >
-      <span style={{ fontSize: 13, color: "#78716c", marginRight: 4, whiteSpace: "nowrap" }}>
-        {isWhite ? "☖後手" : "☗先手"}
+      <span style={{
+        fontSize: labelFont, color: "#92400e", fontWeight: "bold",
+        whiteSpace: "nowrap", flexShrink: 0,
+      }}>
+        {isWhite ? "☖後" : "☗先"}
       </span>
       {pieces.length === 0 && (
-        <span style={{ fontSize: 12, color: "#a8a29e" }}>なし</span>
+        <span style={{ fontSize: labelFont, color: "#a16207" }}>—</span>
       )}
       {pieces.map((kind) => {
         const count = hand[kind] ?? 0;
@@ -119,25 +152,34 @@ export function HandPieces({ hand, color, isActive, selection, onSelect, flipped
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 2,
-              padding: "8px 12px",
-              minWidth: 44, minHeight: 44,
-              borderRadius: 6,
-              fontSize: 20,
+              padding: 0,
+              width: pieceSize,
+              height: pieceSize,
+              borderRadius: 3,
+              fontSize: pieceFont,
               fontWeight: "bold",
+              lineHeight: 1,
               cursor: isActive ? "pointer" : "default",
-              opacity: isActive ? 1 : 0.5,
-              backgroundColor: selected ? "rgba(217, 176, 56, 0.45)" : "#dbb87a",
-              border: selected ? "2px solid #d97706" : "1px solid #d6d3d1",
+              opacity: isActive ? 1 : 0.6,
+              backgroundColor: selected ? "rgba(217, 119, 6, 0.35)" : "#dbb87a",
+              border: selected ? "2px solid #b45309" : "1px solid #a16207",
               transform: shouldRotate ? "rotate(180deg)" : undefined,
               touchAction: "manipulation",
               WebkitTapHighlightColor: "rgba(0,0,0,0)",
               userSelect: "none",
+              flexShrink: 0,
+              position: "relative",
             }}
           >
             <span>{handPieceLabel(kind)}</span>
             {count > 1 && (
-              <span style={{ fontSize: 12, color: "#57534e" }}>{count}</span>
+              <span style={{
+                position: "absolute", right: 1, bottom: -2,
+                fontSize: countFont, color: "#57534e", fontWeight: "bold",
+                lineHeight: 1, transform: shouldRotate ? "rotate(180deg)" : undefined,
+              }}>
+                {count}
+              </span>
             )}
           </button>
         );

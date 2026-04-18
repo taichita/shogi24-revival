@@ -51,13 +51,12 @@ export default function GamePage() {
         <div style={{ fontSize: 13, fontWeight: "bold" }}>{status}</div>
 
         {/* 相手（白）持ち駒 */}
-        <div style={{ width: mobileBoardW }}>
-          <HandPieces
-            hand={game.hands.white} color="white"
-            isActive={game.turn === "white" && !game.result}
-            selection={selection} onSelect={selectHandPiece}
-          />
-        </div>
+        <HandPieces
+          hand={game.hands.white} color="white"
+          isActive={game.turn === "white" && !game.result}
+          selection={selection} onSelect={selectHandPiece}
+          cellSize={cellSize}
+        />
 
         <ShogiBoard
           board={game.board} selection={selection}
@@ -66,13 +65,12 @@ export default function GamePage() {
         />
 
         {/* 自分（黒）持ち駒 */}
-        <div style={{ width: mobileBoardW }}>
-          <HandPieces
-            hand={game.hands.black} color="black"
-            isActive={game.turn === "black" && !game.result}
-            selection={selection} onSelect={selectHandPiece}
-          />
-        </div>
+        <HandPieces
+          hand={game.hands.black} color="black"
+          isActive={game.turn === "black" && !game.result}
+          selection={selection} onSelect={selectHandPiece}
+          cellSize={cellSize}
+        />
 
         {/* 操作ボタン列 */}
         <div style={{

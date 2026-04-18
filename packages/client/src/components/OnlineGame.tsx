@@ -39,6 +39,7 @@ interface Props {
 }
 
 const DESKTOP_CELL = 44;
+const DESKTOP_TRAY_W = DESKTOP_CELL + 6; // 50px（縦駒台の幅、1マス相当）
 const BOARD_W = 9 * DESKTOP_CELL + 4;
 const BOARD_H = 9 * DESKTOP_CELL + 4;
 
@@ -234,11 +235,10 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
           clock={topClock} isActive={game.turn === topColor && !match.result}
           color={topColor} width={mobileBoardW} isGuest={topPlayer.isGuest} />
 
-        {/* 相手持ち駒（横並び） */}
-        <div style={{ width: mobileBoardW }}>
-          <HandPieces hand={game.hands[topColor]} color={topColor}
-            isActive={false} selection={{ type: "none" }} onSelect={() => {}} flipped={flipped} />
-        </div>
+        {/* 相手持ち駒（横並び、盤幅に揃える） */}
+        <HandPieces hand={game.hands[topColor]} color={topColor}
+          isActive={false} selection={{ type: "none" }} onSelect={() => {}}
+          flipped={flipped} cellSize={cellSize} />
 
         {/* 盤面 */}
         <ShogiBoard board={game.board}
@@ -246,12 +246,10 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
           onCellClick={selectCell} lastMove={lastMove} flipped={flipped}
           cellSize={cellSize} />
 
-        {/* 自分持ち駒（横並び） */}
-        <div style={{ width: mobileBoardW }}>
-          <HandPieces hand={game.hands[botColor]} color={botColor}
-            isActive={isMyTurn && !match.result} selection={selection}
-            onSelect={selectHandPiece} flipped={flipped} />
-        </div>
+        {/* 自分持ち駒（横並び、盤幅に揃える） */}
+        <HandPieces hand={game.hands[botColor]} color={botColor}
+          isActive={isMyTurn && !match.result} selection={selection}
+          onSelect={selectHandPiece} flipped={flipped} cellSize={cellSize} />
 
         {/* 自分プレイヤーバー */}
         <MobilePlayerBar handle={botPlayer.handle} rating={botPlayer.rating}
@@ -465,7 +463,7 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
 
           <div style={{
             position: "relative",
-            width: BOARD_W + 2 * (54 + 8),
+            width: BOARD_W + 2 * (DESKTOP_TRAY_W + 6),
             height: BOARD_H + 40,
           }}>
             <div style={{
@@ -474,9 +472,9 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
             }}>
               <HandPieces hand={game.hands[topColor]} color={topColor}
                 isActive={false} selection={{ type: "none" }} onSelect={() => {}}
-                flipped={flipped} vertical />
+                flipped={flipped} vertical cellSize={DESKTOP_CELL} />
             </div>
-            <div style={{ position: "absolute", left: 54 + 8, top: 0 }}>
+            <div style={{ position: "absolute", left: DESKTOP_TRAY_W + 6, top: 0 }}>
               <ShogiBoard board={game.board}
                 selection={isMyTurn ? selection : { type: "none" }}
                 onCellClick={selectCell} lastMove={lastMove} flipped={flipped} />
@@ -487,7 +485,7 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
             }}>
               <HandPieces hand={game.hands[botColor]} color={botColor}
                 isActive={isMyTurn && !match.result} selection={selection}
-                onSelect={selectHandPiece} flipped={flipped} vertical />
+                onSelect={selectHandPiece} flipped={flipped} vertical cellSize={DESKTOP_CELL} />
             </div>
           </div>
 

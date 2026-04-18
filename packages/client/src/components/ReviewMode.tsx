@@ -55,6 +55,7 @@ function replayToMove(moves: Move[], targetIndex: number): GameState {
 }
 
 const DESKTOP_CELL = 44;
+const DESKTOP_TRAY_W = DESKTOP_CELL + 6;
 const BOARD_W = 9 * DESKTOP_CELL + 4;
 const BOARD_H = 9 * DESKTOP_CELL + 4;
 
@@ -233,14 +234,13 @@ export function ReviewMode({
           {topColor === "black" ? `☗ ${blackHandle}` : `☖ ${whiteHandle}`}
         </div>
 
-        {/* 相手持ち駒（横並び） */}
-        <div style={{ width: mobileBoardW }}>
-          <HandPieces
-            hand={displayBoard.hands[topColor]} color={topColor}
-            isActive={isEditable && displayBoard.turn === topColor}
-            selection={selection} onSelect={selectHandPiece} flipped={flipped}
-          />
-        </div>
+        {/* 相手持ち駒（横並び、盤幅に揃える） */}
+        <HandPieces
+          hand={displayBoard.hands[topColor]} color={topColor}
+          isActive={isEditable && displayBoard.turn === topColor}
+          selection={selection} onSelect={selectHandPiece} flipped={flipped}
+          cellSize={cellSize}
+        />
 
         {/* 盤面 */}
         <ShogiBoard
@@ -250,14 +250,13 @@ export function ReviewMode({
           cellSize={cellSize}
         />
 
-        {/* 自分持ち駒（横並び） */}
-        <div style={{ width: mobileBoardW }}>
-          <HandPieces
-            hand={displayBoard.hands[botColor]} color={botColor}
-            isActive={isEditable && displayBoard.turn === botColor}
-            selection={selection} onSelect={selectHandPiece} flipped={flipped}
-          />
-        </div>
+        {/* 自分持ち駒（横並び、盤幅に揃える） */}
+        <HandPieces
+          hand={displayBoard.hands[botColor]} color={botColor}
+          isActive={isEditable && displayBoard.turn === botColor}
+          selection={selection} onSelect={selectHandPiece} flipped={flipped}
+          cellSize={cellSize}
+        />
 
         {/* プレイヤー名（下） */}
         <div style={{ fontSize: 11, color: "#78716c", width: mobileBoardW, textAlign: "center" }}>
@@ -459,17 +458,18 @@ export function ReviewMode({
           {/* 盤面と持ち駒（対局画面と同様に絶対配置） */}
           <div style={{
             position: "relative",
-            width: BOARD_W + 2 * (54 + 8),
+            width: BOARD_W + 2 * (DESKTOP_TRAY_W + 6),
             height: BOARD_H + 40,
           }}>
             <div style={{ position: "absolute", left: 0, top: 20, maxHeight: BOARD_H, overflowY: "auto" }}>
               <HandPieces
                 hand={displayBoard.hands[topColor]} color={topColor}
                 isActive={isEditable && displayBoard.turn === topColor}
-                selection={selection} onSelect={selectHandPiece} flipped={flipped} vertical
+                selection={selection} onSelect={selectHandPiece} flipped={flipped}
+                vertical cellSize={DESKTOP_CELL}
               />
             </div>
-            <div style={{ position: "absolute", left: 54 + 8, top: 0 }}>
+            <div style={{ position: "absolute", left: DESKTOP_TRAY_W + 6, top: 0 }}>
               <ShogiBoard
                 board={displayBoard.board}
                 selection={isEditable ? selection : { type: "none" }}
@@ -480,7 +480,8 @@ export function ReviewMode({
               <HandPieces
                 hand={displayBoard.hands[botColor]} color={botColor}
                 isActive={isEditable && displayBoard.turn === botColor}
-                selection={selection} onSelect={selectHandPiece} flipped={flipped} vertical
+                selection={selection} onSelect={selectHandPiece} flipped={flipped}
+                vertical cellSize={DESKTOP_CELL}
               />
             </div>
           </div>
