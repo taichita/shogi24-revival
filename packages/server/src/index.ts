@@ -11,7 +11,7 @@ import { opponent, apply24Rating, createGame, makeMove as engineMakeMove } from 
 import { MatchManager } from './match-manager.js';
 import { MatchQueue } from './queue.js';
 import { Lobby } from './lobby.js';
-import { initDb, loginOrCreate, updateRating, saveMatch, getUserById, setUserHandleAndRating, searchUsersByHandle, getMatchesForUser } from './db.js';
+import { initDb, loginOrCreate, updateRating, saveMatch, getUserById, setUserHandleAndRating, searchUsersByHandle, getMatchesForUser, getMatchById } from './db.js';
 import { isValidInitialRating } from '@shogi24/engine';
 import { authRouter, verifyToken } from './auth.js';
 
@@ -28,7 +28,7 @@ app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.get('/', (_req, res) => { res.send('ok'); });
 app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
 
-// ユーザー検索 (ハンドル名前方一致)
+// ユーザー検索 (ハンドル名前方一致 or 登録番号)
 app.get('/api/users/search', async (req, res) => {
   const q = (req.query.q as string | undefined)?.trim() ?? '';
   if (q.length === 0) { res.json({ users: [] }); return; }
@@ -38,6 +38,7 @@ app.get('/api/users/search', async (req, res) => {
       users: users.map(u => ({
         id: u.id, handle: u.handle, rating: u.rating,
         games: u.games, wins: u.wins, isGuest: !u.googleId,
+        userNumber: u.userNumber,
       })),
     });
   } catch (e) {
@@ -54,11 +55,27 @@ app.get('/api/users/:userId/matches', async (req, res) => {
     if (!user) { res.status(404).json({ error: 'user not found' }); return; }
     const matches = await getMatchesForUser(userId);
     res.json({
-      user: { id: user.id, handle: user.handle, rating: user.rating, games: user.games, wins: user.wins, isGuest: !user.googleId },
+      user: {
+        id: user.id, handle: user.handle, rating: user.rating,
+        games: user.games, wins: user.wins, isGuest: !user.googleId,
+        userNumber: user.userNumber,
+      },
       matches,
     });
   } catch (e) {
     console.error('[api] matches error:', e);
+    res.status(500).json({ error: 'fetch failed' });
+  }
+});
+
+// 対局詳細取得（棋譜再生用）
+app.get('/api/matches/:matchId', async (req, res) => {
+  try {
+    const match = await getMatchById(req.params.matchId);
+    if (!match) { res.status(404).json({ error: 'match not found' }); return; }
+    res.json({ match });
+  } catch (e) {
+    console.error('[api] match detail error:', e);
     res.status(500).json({ error: 'fetch failed' });
   }
 });
@@ -265,7 +282,7 @@ async function handleMatchEnd(matchId: string, result: { winner: string | null; 
       console.log(`[rating] ${winnerIsBlack ? room.black.handle : room.white.handle} ${winnerR}→${rr.nextWinner} (+${rr.exchanged}), ${winnerIsBlack ? room.white.handle : room.black.handle} ${loserR}→${rr.nextLoser} (-${rr.exchanged})`);
     }
 
-    // 対局記録は常に保存（ゲスト参加時もレート変動0で記録）
+    // 対局記録は常に保存（ゲスト参加時もレート変動0で記録、棋譜はJSON保存）
     const winnerUserId = winnerIsBlack ? room.black.userId : room.white.userId;
     await saveMatch({
       id: matchId,
@@ -275,6 +292,7 @@ async function handleMatchEnd(matchId: string, result: { winner: string | null; 
       ratingDelta: (rr.rated && !hasGuest) ? rr.exchanged : 0,
       timePreset: room.timePreset.name,
       moves: room.game.moveCount,
+      movesJson: JSON.stringify(room.game.moves),
     });
   }
 

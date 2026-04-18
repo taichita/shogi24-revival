@@ -38,7 +38,9 @@ export async function initDb(): Promise<void> {
       avatar_url   TEXT,
       rating       INTEGER NOT NULL DEFAULT 1500,
       games        INTEGER NOT NULL DEFAULT 0,
-      wins         INTEGER NOT NULL DEFAULT 0
+      wins         INTEGER NOT NULL DEFAULT 0,
+      user_number  INTEGER UNIQUE,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
   await client.execute(`
@@ -53,6 +55,7 @@ export async function initDb(): Promise<void> {
       rating_delta INTEGER NOT NULL DEFAULT 0,
       time_preset  TEXT NOT NULL,
       moves        INTEGER NOT NULL DEFAULT 0,
+      moves_json   TEXT,
       created_at   TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
@@ -61,6 +64,9 @@ export async function initDb(): Promise<void> {
   try { await client.execute('ALTER TABLE users ADD COLUMN google_id TEXT UNIQUE'); } catch {}
   try { await client.execute('ALTER TABLE users ADD COLUMN display_name TEXT'); } catch {}
   try { await client.execute('ALTER TABLE users ADD COLUMN avatar_url TEXT'); } catch {}
+  try { await client.execute('ALTER TABLE users ADD COLUMN user_number INTEGER'); } catch {}
+  try { await client.execute("ALTER TABLE users ADD COLUMN created_at TEXT DEFAULT (datetime('now'))"); } catch {}
+  try { await client.execute('ALTER TABLE matches ADD COLUMN moves_json TEXT'); } catch {}
 
   console.log('[db] initialized');
 }
@@ -78,6 +84,7 @@ export interface DbUser {
   rating: number;
   games: number;
   wins: number;
+  userNumber?: number;
 }
 
 function rowToUser(row: Record<string, unknown>): DbUser {
@@ -90,7 +97,15 @@ function rowToUser(row: Record<string, unknown>): DbUser {
     rating: Number(row.rating),
     games: Number(row.games),
     wins: Number(row.wins),
+    userNumber: row.user_number != null ? Number(row.user_number) : undefined,
   };
+}
+
+/** 次のユーザー番号を取得 */
+async function nextUserNumber(): Promise<number> {
+  const res = await client.execute('SELECT COALESCE(MAX(user_number), 0) + 1 AS next FROM users');
+  const row = res.rows[0] as unknown as Record<string, unknown>;
+  return Number(row.next);
 }
 
 /** ハンドル名でログイン。なければ新規作成 */
@@ -107,11 +122,12 @@ export async function loginOrCreate(socketId: string, handle: string, initialRat
     const user = rowToUser(row);
     return { ...user, id: socketId };
   }
+  const userNumber = await nextUserNumber();
   await client.execute({
-    sql: 'INSERT INTO users (id, handle, rating, games, wins) VALUES (?, ?, ?, 0, 0)',
-    args: [socketId, handle, initialRating],
+    sql: 'INSERT INTO users (id, handle, rating, games, wins, user_number) VALUES (?, ?, ?, 0, 0, ?)',
+    args: [socketId, handle, initialRating, userNumber],
   });
-  return { id: socketId, handle, rating: initialRating, games: 0, wins: 0 };
+  return { id: socketId, handle, rating: initialRating, games: 0, wins: 0, userNumber };
 }
 
 /** レート更新 */
@@ -142,11 +158,12 @@ export async function findOrCreateGoogleUser(googleId: string, displayName: stri
   }
   // 新規作成: handleはNULL（初回ログイン時にユーザーが設定）
   const id = randomUUID();
+  const userNumber = await nextUserNumber();
   await client.execute({
-    sql: 'INSERT INTO users (id, google_id, display_name, avatar_url, rating, games, wins) VALUES (?, ?, ?, ?, 1500, 0, 0)',
-    args: [id, googleId, displayName, avatarUrl ?? null],
+    sql: 'INSERT INTO users (id, google_id, display_name, avatar_url, rating, games, wins, user_number) VALUES (?, ?, ?, ?, 1500, 0, 0, ?)',
+    args: [id, googleId, displayName, avatarUrl ?? null, userNumber],
   });
-  return { id, handle: null, googleId, displayName, avatarUrl, rating: 1500, games: 0, wins: 0 };
+  return { id, handle: null, googleId, displayName, avatarUrl, rating: 1500, games: 0, wins: 0, userNumber };
 }
 
 /** ハンドル名と初期レートを設定（Google認証ユーザーの初回設定） */
@@ -174,12 +191,20 @@ export async function getUserById(userId: string): Promise<DbUser | undefined> {
 // 対局記録
 // ============================================================
 
-/** ハンドル名でユーザー検索（前方一致、最大20件） */
+/** ハンドル名または登録番号でユーザー検索（最大20件） */
 export async function searchUsersByHandle(query: string): Promise<DbUser[]> {
-  const res = await client.execute({
-    sql: 'SELECT * FROM users WHERE handle LIKE ? ORDER BY rating DESC LIMIT 20',
-    args: [`${query}%`],
-  });
+  // 数値のみなら番号検索も併用
+  const num = /^\d+$/.test(query) ? Number(query) : null;
+  let sql: string;
+  let args: (string | number)[];
+  if (num !== null) {
+    sql = 'SELECT * FROM users WHERE user_number = ? OR handle LIKE ? ORDER BY rating DESC LIMIT 20';
+    args = [num, `${query}%`];
+  } else {
+    sql = 'SELECT * FROM users WHERE handle LIKE ? ORDER BY rating DESC LIMIT 20';
+    args = [`${query}%`];
+  }
+  const res = await client.execute({ sql, args });
   return res.rows.map(r => rowToUser(r as unknown as Record<string, unknown>));
 }
 
@@ -235,13 +260,44 @@ export async function saveMatch(data: {
   id: string; blackId: string; whiteId: string; winnerId: string | null;
   result: string; blackRating: number; whiteRating: number;
   ratingDelta: number; timePreset: string; moves: number;
+  movesJson: string;
 }): Promise<void> {
   await client.execute({
-    sql: `INSERT INTO matches (id, black_id, white_id, winner_id, result, black_rating, white_rating, rating_delta, time_preset, moves)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO matches (id, black_id, white_id, winner_id, result, black_rating, white_rating, rating_delta, time_preset, moves, moves_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       data.id, data.blackId, data.whiteId, data.winnerId, data.result,
-      data.blackRating, data.whiteRating, data.ratingDelta, data.timePreset, data.moves,
+      data.blackRating, data.whiteRating, data.ratingDelta, data.timePreset, data.moves, data.movesJson,
     ],
   });
+}
+
+/** 対局IDで対局詳細（棋譜含む）を取得 */
+export async function getMatchById(matchId: string): Promise<(MatchRecord & { movesJson: string | null }) | undefined> {
+  const res = await client.execute({
+    sql: `SELECT m.*, b.handle AS black_handle, w.handle AS white_handle
+          FROM matches m
+          LEFT JOIN users b ON m.black_id = b.id
+          LEFT JOIN users w ON m.white_id = w.id
+          WHERE m.id = ?`,
+    args: [matchId],
+  });
+  if (res.rows.length === 0) return undefined;
+  const row = res.rows[0] as unknown as Record<string, unknown>;
+  return {
+    id: row.id as string,
+    blackId: row.black_id as string,
+    whiteId: row.white_id as string,
+    blackHandle: (row.black_handle as string | null) ?? null,
+    whiteHandle: (row.white_handle as string | null) ?? null,
+    winnerId: (row.winner_id as string | null) ?? null,
+    result: row.result as string,
+    blackRating: Number(row.black_rating),
+    whiteRating: Number(row.white_rating),
+    ratingDelta: Number(row.rating_delta),
+    timePreset: row.time_preset as string,
+    moves: Number(row.moves),
+    createdAt: row.created_at as string,
+    movesJson: (row.moves_json as string | null) ?? null,
+  };
 }

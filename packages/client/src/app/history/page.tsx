@@ -12,6 +12,7 @@ interface UserResult {
   games: number;
   wins: number;
   isGuest?: boolean;
+  userNumber?: number;
 }
 
 interface MatchRecord {
@@ -103,7 +104,7 @@ export default function HistoryPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-          placeholder="ハンドル名で検索（前方一致）"
+          placeholder="ハンドル名 または 登録番号で検索"
           style={{
             flex: 1, padding: "8px 12px", fontSize: 14, borderRadius: 6,
             border: "1px solid #d6d3d1", outline: "none", minWidth: 0,
@@ -141,6 +142,11 @@ export default function HistoryPage() {
               }}
             >
               <span style={{ fontWeight: "bold", flex: 1 }}>
+                {u.userNumber != null && (
+                  <span style={{ color: "#78716c", fontSize: 12, marginRight: 6, fontFamily: "monospace" }}>
+                    #{u.userNumber}
+                  </span>
+                )}
                 {u.handle}
                 {u.isGuest && (
                   <span style={{
@@ -182,6 +188,11 @@ export default function HistoryPage() {
               ← 戻る
             </button>
             <span style={{ fontSize: 16, fontWeight: "bold" }}>
+              {selectedUser.userNumber != null && (
+                <span style={{ color: "#78716c", fontSize: 13, marginRight: 6, fontFamily: "monospace" }}>
+                  #{selectedUser.userNumber}
+                </span>
+              )}
               {selectedUser.handle}
               {selectedUser.isGuest && (
                 <span style={{
@@ -249,6 +260,14 @@ export default function HistoryPage() {
                     <span style={{ fontSize: 11, color: "#a8a29e", marginLeft: "auto" }}>
                       {date}
                     </span>
+                    <a href={`/kifu/${m.id}`}
+                      style={{
+                        fontSize: 11, padding: "3px 8px", borderRadius: 4,
+                        backgroundColor: "#44403c", color: "white", fontWeight: "bold",
+                        textDecoration: "none",
+                      }}>
+                      棋譜再生
+                    </a>
                   </div>
                 );
               })}
