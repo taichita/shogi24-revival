@@ -348,9 +348,14 @@ export default function OnlinePage() {
         </div>
       )}
 
-      <a href="/" style={{ fontSize: 13, color: "#78716c", textDecoration: "underline" }}>
-        ローカル対局はこちら
-      </a>
+      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+        <a href="/history" style={{ fontSize: 13, color: "#78716c", textDecoration: "underline" }}>
+          戦績検索
+        </a>
+        <a href="/" style={{ fontSize: 13, color: "#78716c", textDecoration: "underline" }}>
+          ローカル対局
+        </a>
+      </div>
     </main>
   );
 }

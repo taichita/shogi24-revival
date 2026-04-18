@@ -27,6 +27,7 @@ export interface LobbyPlayer {
   status: "idle" | "resting" | "automatch" | "playing";
   preferredTime: string;
   matchId?: string;
+  isGuest?: boolean;
 }
 
 export interface IncomingChallenge {
@@ -38,8 +39,8 @@ export interface IncomingChallenge {
 export interface OnlineMatchState {
   matchId: string;
   myColor: Color;
-  blackPlayer: { handle: string; rating: number };
-  whitePlayer: { handle: string; rating: number };
+  blackPlayer: { handle: string; rating: number; isGuest?: boolean };
+  whitePlayer: { handle: string; rating: number; isGuest?: boolean };
   game: GameState | null;
   clock: ClockState | null;
   timePreset: TimePreset | null;

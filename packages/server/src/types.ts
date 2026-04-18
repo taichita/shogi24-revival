@@ -27,6 +27,7 @@ export interface Player {
   userId: string;    // persistent DB id (UUID or socket.id for legacy)
   handle: string;
   rating: number;
+  isGuest: boolean;  // Google未認証のゲストユーザー
 }
 
 /** 感想戦のボード状態 */
@@ -85,8 +86,8 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   'match.started': (data: {
     matchId: string;
-    black: { handle: string; rating: number };
-    white: { handle: string; rating: number };
+    black: { handle: string; rating: number; isGuest?: boolean };
+    white: { handle: string; rating: number; isGuest?: boolean };
     yourColor: Color;
     timePreset: TimePreset;
   }) => void;
@@ -122,8 +123,8 @@ export interface ServerToClientEvents {
   'auth.kicked': (data: { reason: string }) => void;
   'match.spectate.started': (data: {
     matchId: string;
-    black: { handle: string; rating: number };
-    white: { handle: string; rating: number };
+    black: { handle: string; rating: number; isGuest?: boolean };
+    white: { handle: string; rating: number; isGuest?: boolean };
     game: GameState;
     clock: ClockState;
     timePreset: TimePreset;
@@ -141,6 +142,7 @@ export interface LobbyPlayerInfo {
   status: 'idle' | 'resting' | 'automatch' | 'playing';
   preferredTime: string;
   matchId?: string;
+  isGuest?: boolean;
 }
 
 export interface InterServerEvents {}

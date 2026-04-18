@@ -232,7 +232,7 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
         {/* 相手プレイヤーバー（コンパクト） */}
         <MobilePlayerBar handle={topPlayer.handle} rating={topPlayer.rating}
           clock={topClock} isActive={game.turn === topColor && !match.result}
-          color={topColor} width={mobileBoardW} />
+          color={topColor} width={mobileBoardW} isGuest={topPlayer.isGuest} />
 
         {/* 相手持ち駒（横並び） */}
         <div style={{ width: mobileBoardW }}>
@@ -256,7 +256,7 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
         {/* 自分プレイヤーバー */}
         <MobilePlayerBar handle={botPlayer.handle} rating={botPlayer.rating}
           clock={botClock} isActive={game.turn === botColor && !match.result}
-          color={botColor} width={mobileBoardW} />
+          color={botColor} width={mobileBoardW} isGuest={botPlayer.isGuest} />
 
         {/* 操作ボタン列（画面内に収める） */}
         <div style={{
@@ -460,7 +460,8 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
 
         <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center", flexShrink: 0 }}>
           <PlayerBar handle={topPlayer.handle} rating={topPlayer.rating}
-            clock={topClock} isActive={game.turn === topColor && !match.result} color={topColor} />
+            clock={topClock} isActive={game.turn === topColor && !match.result} color={topColor}
+            isGuest={topPlayer.isGuest} />
 
           <div style={{
             position: "relative",
@@ -491,7 +492,8 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
           </div>
 
           <PlayerBar handle={botPlayer.handle} rating={botPlayer.rating}
-            clock={botClock} isActive={game.turn === botColor && !match.result} color={botColor} />
+            clock={botClock} isActive={game.turn === botColor && !match.result} color={botColor}
+            isGuest={botPlayer.isGuest} />
         </div>
 
         {!isNarrow && <LobbySidebar players={lobbyPlayers} myId={myId} />}
@@ -510,10 +512,10 @@ function mobileBtn(bg: string, fg: string): React.CSSProperties {
   };
 }
 
-function PlayerBar({ handle, rating, clock, isActive, color }: {
+function PlayerBar({ handle, rating, clock, isActive, color, isGuest }: {
   handle: string; rating: number;
   clock?: { remainMs: number; inByoyomi: boolean };
-  isActive: boolean; color: Color;
+  isActive: boolean; color: Color; isGuest?: boolean;
 }) {
   const symbol = color === "black" ? "☗" : "☖";
   const low = clock && clock.remainMs <= 10000;
@@ -527,6 +529,9 @@ function PlayerBar({ handle, rating, clock, isActive, color }: {
     }}>
       <span style={{ fontWeight: "bold" }}>
         {symbol} {handle}
+        {isGuest && (
+          <span style={{ fontSize: 9, padding: "1px 4px", marginLeft: 4, borderRadius: 3, backgroundColor: "#e7e5e4", color: "#78716c" }}>ゲスト</span>
+        )}
         <span style={{ fontSize: 11, color: "#78716c", marginLeft: 4 }}>{ratingToRank(rating)} R{rating}</span>
       </span>
       {clock && (
@@ -539,10 +544,10 @@ function PlayerBar({ handle, rating, clock, isActive, color }: {
   );
 }
 
-function MobilePlayerBar({ handle, rating, clock, isActive, color, width }: {
+function MobilePlayerBar({ handle, rating, clock, isActive, color, width, isGuest }: {
   handle: string; rating: number;
   clock?: { remainMs: number; inByoyomi: boolean };
-  isActive: boolean; color: Color; width: number;
+  isActive: boolean; color: Color; width: number; isGuest?: boolean;
 }) {
   const symbol = color === "black" ? "☗" : "☖";
   const low = clock && clock.remainMs <= 10000;
@@ -556,6 +561,9 @@ function MobilePlayerBar({ handle, rating, clock, isActive, color, width }: {
     }}>
       <span style={{ fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
         {symbol} {handle}
+        {isGuest && (
+          <span style={{ fontSize: 8, padding: "1px 3px", marginLeft: 3, borderRadius: 3, backgroundColor: "#e7e5e4", color: "#78716c" }}>G</span>
+        )}
         <span style={{ fontSize: 10, color: "#78716c", marginLeft: 3 }}>{ratingToRank(rating)}</span>
       </span>
       {clock && (

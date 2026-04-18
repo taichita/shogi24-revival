@@ -11,7 +11,7 @@ import { opponent, apply24Rating, createGame, makeMove as engineMakeMove } from 
 import { MatchManager } from './match-manager.js';
 import { MatchQueue } from './queue.js';
 import { Lobby } from './lobby.js';
-import { initDb, loginOrCreate, updateRating, saveMatch, getUserById, setUserHandleAndRating } from './db.js';
+import { initDb, loginOrCreate, updateRating, saveMatch, getUserById, setUserHandleAndRating, searchUsersByHandle, getMatchesForUser } from './db.js';
 import { isValidInitialRating } from '@shogi24/engine';
 import { authRouter, verifyToken } from './auth.js';
 
@@ -27,6 +27,41 @@ app.use(cors({ origin: ALLOWED_ORIGINS }));
 // ヘルスチェック（Renderスリープ防止用）
 app.get('/', (_req, res) => { res.send('ok'); });
 app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
+
+// ユーザー検索 (ハンドル名前方一致)
+app.get('/api/users/search', async (req, res) => {
+  const q = (req.query.q as string | undefined)?.trim() ?? '';
+  if (q.length === 0) { res.json({ users: [] }); return; }
+  try {
+    const users = await searchUsersByHandle(q);
+    res.json({
+      users: users.map(u => ({
+        id: u.id, handle: u.handle, rating: u.rating,
+        games: u.games, wins: u.wins, isGuest: !u.googleId,
+      })),
+    });
+  } catch (e) {
+    console.error('[api] search error:', e);
+    res.status(500).json({ error: 'search failed' });
+  }
+});
+
+// ユーザーの対局履歴取得
+app.get('/api/users/:userId/matches', async (req, res) => {
+  const userId = req.params.userId;
+  try {
+    const user = await getUserById(userId);
+    if (!user) { res.status(404).json({ error: 'user not found' }); return; }
+    const matches = await getMatchesForUser(userId);
+    res.json({
+      user: { id: user.id, handle: user.handle, rating: user.rating, games: user.games, wins: user.wins, isGuest: !user.googleId },
+      matches,
+    });
+  } catch (e) {
+    console.error('[api] matches error:', e);
+    res.status(500).json({ error: 'fetch failed' });
+  }
+});
 
 app.use('/auth', authRouter);
 const httpServer = createServer(app);
@@ -116,19 +151,15 @@ function startMatch(blackPlayer: Player, whitePlayer: Player, presetKey: string)
   blackSocket?.join(room.id);
   whiteSocket?.join(room.id);
 
+  const blackInfo = { handle: blackPlayer.handle, rating: blackPlayer.rating, isGuest: blackPlayer.isGuest };
+  const whiteInfo = { handle: whitePlayer.handle, rating: whitePlayer.rating, isGuest: whitePlayer.isGuest };
   blackSocket?.emit('match.started', {
-    matchId: room.id,
-    black: { handle: blackPlayer.handle, rating: blackPlayer.rating },
-    white: { handle: whitePlayer.handle, rating: whitePlayer.rating },
-    yourColor: 'black',
-    timePreset: room.timePreset,
+    matchId: room.id, black: blackInfo, white: whiteInfo,
+    yourColor: 'black', timePreset: room.timePreset,
   });
   whiteSocket?.emit('match.started', {
-    matchId: room.id,
-    black: { handle: blackPlayer.handle, rating: blackPlayer.rating },
-    white: { handle: whitePlayer.handle, rating: whitePlayer.rating },
-    yourColor: 'white',
-    timePreset: room.timePreset,
+    matchId: room.id, black: blackInfo, white: whiteInfo,
+    yourColor: 'white', timePreset: room.timePreset,
   });
 
   io.to(room.id).emit('match.snapshot', {
@@ -188,7 +219,7 @@ function broadcastLobby(): void {
     return {
       id: p.id, handle: p.handle, rating: p.rating,
       status: p.status, preferredTime: p.preferredTime,
-      matchId: m?.id,
+      matchId: m?.id, isGuest: p.isGuest,
     };
   });
   io.emit('lobby.snapshot', { players });
@@ -199,6 +230,9 @@ async function handleMatchEnd(matchId: string, result: { winner: string | null; 
   const room = matchManager.getMatch(matchId);
   if (!room) return;
 
+  // ゲストが絡む対局はレート変動なし（対局記録のみ残す）
+  const hasGuest = room.black.isGuest || room.white.isGuest;
+
   // 引き分け以外ならレート更新
   if (result.winner) {
     const winnerIsBlack = result.winner === 'black';
@@ -206,7 +240,7 @@ async function handleMatchEnd(matchId: string, result: { winner: string | null; 
     const loserR = winnerIsBlack ? room.white.rating : room.black.rating;
     const rr = apply24Rating(winnerR, loserR);
 
-    if (rr.rated) {
+    if (rr.rated && !hasGuest) {
       // メモリ上のプレイヤーレート更新
       const winnerId = winnerIsBlack ? room.black.id : room.white.id;
       const loserId = winnerIsBlack ? room.white.id : room.black.id;
@@ -229,17 +263,19 @@ async function handleMatchEnd(matchId: string, result: { winner: string | null; 
       await updateRating(loserUserId, rr.nextLoser, false);
 
       console.log(`[rating] ${winnerIsBlack ? room.black.handle : room.white.handle} ${winnerR}→${rr.nextWinner} (+${rr.exchanged}), ${winnerIsBlack ? room.white.handle : room.black.handle} ${loserR}→${rr.nextLoser} (-${rr.exchanged})`);
-
-      // 対局記録保存
-      await saveMatch({
-        id: matchId,
-        blackId: room.black.userId, whiteId: room.white.userId,
-        winnerId: winnerUserId, result: result.reason,
-        blackRating: room.black.rating, whiteRating: room.white.rating,
-        ratingDelta: rr.exchanged, timePreset: room.timePreset.name,
-        moves: room.game.moveCount,
-      });
     }
+
+    // 対局記録は常に保存（ゲスト参加時もレート変動0で記録）
+    const winnerUserId = winnerIsBlack ? room.black.userId : room.white.userId;
+    await saveMatch({
+      id: matchId,
+      blackId: room.black.userId, whiteId: room.white.userId,
+      winnerId: winnerUserId, result: result.reason,
+      blackRating: room.black.rating, whiteRating: room.white.rating,
+      ratingDelta: (rr.rated && !hasGuest) ? rr.exchanged : 0,
+      timePreset: room.timePreset.name,
+      moves: room.game.moveCount,
+    });
   }
 
   lobby.setStatus(room.black.id, 'idle');
@@ -283,6 +319,7 @@ io.on('connection', (socket) => {
           userId: dbUser.id,
           handle: dbUser.handle,
           rating: dbUser.rating,
+          isGuest: !dbUser.googleId,
         };
         socket.data.player = player;
         lobby.join(player);
@@ -321,6 +358,7 @@ io.on('connection', (socket) => {
       userId: dbUser.id,
       handle: dbUser.handle!,
       rating: dbUser.rating,
+      isGuest: true, // レガシーログインは常にゲスト扱い
     };
     socket.data.player = player;
     lobby.join(player);
@@ -366,6 +404,7 @@ io.on('connection', (socket) => {
       userId: dbUser.id,
       handle: dbUser.handle,
       rating: dbUser.rating,
+      isGuest: !dbUser.googleId,
     };
     socket.data.player = player;
     socket.data.pendingUserId = undefined;
@@ -580,8 +619,8 @@ io.on('connection', (socket) => {
 
     socket.emit('match.spectate.started', {
       matchId: room.id,
-      black: { handle: room.black.handle, rating: room.black.rating },
-      white: { handle: room.white.handle, rating: room.white.rating },
+      black: { handle: room.black.handle, rating: room.black.rating, isGuest: room.black.isGuest },
+      white: { handle: room.white.handle, rating: room.white.rating, isGuest: room.white.isGuest },
       game: room.game,
       clock: room.clock,
       timePreset: room.timePreset,

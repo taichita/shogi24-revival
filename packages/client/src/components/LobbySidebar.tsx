@@ -66,7 +66,15 @@ export function LobbySidebar({ players, myId }: Props) {
               }}
             >
               <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontWeight: "bold", fontSize: 12 }}>{p.handle}</span>
+                <span style={{ fontWeight: "bold", fontSize: 12 }}>
+                  {p.handle}
+                  {p.isGuest && (
+                    <span style={{
+                      marginLeft: 3, fontSize: 8, padding: "1px 3px",
+                      borderRadius: 3, backgroundColor: "#e7e5e4", color: "#78716c",
+                    }}>G</span>
+                  )}
+                </span>
                 <span style={{ fontSize: 10, color: "#78716c", fontFamily: "monospace" }}>
                   {ratingToRank(p.rating)} R{p.rating}
                 </span>

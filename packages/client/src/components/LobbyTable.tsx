@@ -159,7 +159,15 @@ export function LobbyTable({
               const sc = STATUS_COLORS[p.status] ?? STATUS_COLORS.resting;
               return (
                 <tr key={p.id} style={{ borderBottom: "1px solid #e7e5e4", backgroundColor: "#fafaf9" }}>
-                  <td style={td}><span style={{ fontWeight: "bold" }}>{p.handle}</span></td>
+                  <td style={td}>
+                    <span style={{ fontWeight: "bold" }}>{p.handle}</span>
+                    {p.isGuest && (
+                      <span style={{
+                        marginLeft: 4, fontSize: 9, padding: "1px 4px",
+                        borderRadius: 4, backgroundColor: "#e7e5e4", color: "#78716c",
+                      }}>ゲスト</span>
+                    )}
+                  </td>
                   <td style={{ ...td, fontFamily: "monospace" }}>{ratingToRank(p.rating)} R{p.rating}</td>
                   <td style={td}>
                     <span style={{

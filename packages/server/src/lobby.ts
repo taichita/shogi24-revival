@@ -9,6 +9,7 @@ export interface LobbyPlayer {
   rating: number;
   status: PlayerStatus;
   preferredTime: string;  // preset key
+  isGuest: boolean;
 }
 
 export interface Challenge {
@@ -33,6 +34,7 @@ export class Lobby {
       rating: player.rating,
       status: 'resting',
       preferredTime: 'normal',
+      isGuest: player.isGuest,
     };
     this.players.set(player.id, lp);
     return lp;
@@ -79,7 +81,6 @@ export class Lobby {
     if (!to) return '相手が見つかりません';
     if (from.id === to.id) return '自分には挑戦できません';
     if (from.status === 'playing') return '対局中です';
-    if (from.status === 'resting') return '待機室に入ってから挑戦してください';
     if (to.status !== 'idle') return '相手は挑戦を受け付けていません';
 
     // 既に同じ相手への挑戦があるか

@@ -174,6 +174,63 @@ export async function getUserById(userId: string): Promise<DbUser | undefined> {
 // 対局記録
 // ============================================================
 
+/** ハンドル名でユーザー検索（前方一致、最大20件） */
+export async function searchUsersByHandle(query: string): Promise<DbUser[]> {
+  const res = await client.execute({
+    sql: 'SELECT * FROM users WHERE handle LIKE ? ORDER BY rating DESC LIMIT 20',
+    args: [`${query}%`],
+  });
+  return res.rows.map(r => rowToUser(r as unknown as Record<string, unknown>));
+}
+
+export interface MatchRecord {
+  id: string;
+  blackId: string;
+  whiteId: string;
+  blackHandle: string | null;
+  whiteHandle: string | null;
+  winnerId: string | null;
+  result: string;
+  blackRating: number;
+  whiteRating: number;
+  ratingDelta: number;
+  timePreset: string;
+  moves: number;
+  createdAt: string;
+}
+
+/** ユーザーIDで対局履歴を取得（新しい順、最大50件） */
+export async function getMatchesForUser(userId: string): Promise<MatchRecord[]> {
+  const res = await client.execute({
+    sql: `SELECT m.*, b.handle AS black_handle, w.handle AS white_handle
+          FROM matches m
+          LEFT JOIN users b ON m.black_id = b.id
+          LEFT JOIN users w ON m.white_id = w.id
+          WHERE m.black_id = ? OR m.white_id = ?
+          ORDER BY m.created_at DESC
+          LIMIT 50`,
+    args: [userId, userId],
+  });
+  return res.rows.map(r => {
+    const row = r as unknown as Record<string, unknown>;
+    return {
+      id: row.id as string,
+      blackId: row.black_id as string,
+      whiteId: row.white_id as string,
+      blackHandle: (row.black_handle as string | null) ?? null,
+      whiteHandle: (row.white_handle as string | null) ?? null,
+      winnerId: (row.winner_id as string | null) ?? null,
+      result: row.result as string,
+      blackRating: Number(row.black_rating),
+      whiteRating: Number(row.white_rating),
+      ratingDelta: Number(row.rating_delta),
+      timePreset: row.time_preset as string,
+      moves: Number(row.moves),
+      createdAt: row.created_at as string,
+    };
+  });
+}
+
 export async function saveMatch(data: {
   id: string; blackId: string; whiteId: string; winnerId: string | null;
   result: string; blackRating: number; whiteRating: number;
