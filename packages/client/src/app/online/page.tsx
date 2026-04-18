@@ -18,7 +18,7 @@ export default function OnlinePage() {
     spectating, spectateMatch, leaveSpectate,
     sendMove, sendResign, claimWin, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
-    enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,
+    enterReview, sendReviewMove, sendReviewBoard, reviewUndo, reviewReset, leaveReview,
   } = useSocket();
 
   const [inputHandle, setInputHandle] = useState("");
@@ -70,9 +70,8 @@ export default function OnlinePage() {
             myColor={match.myColor}
             myBoard={reviewMyBoard}
             opponentBoard={reviewOpponentBoard}
-            onReviewMove={sendReviewMove}
-            onUndo={reviewUndo}
-            onReset={reviewReset}
+            finalGame={match.game}
+            onReviewBoard={sendReviewBoard}
             onLeave={leaveReview}
             onBackToLobby={backToLobby}
             chatMessages={chatMessages}

@@ -750,6 +750,21 @@ io.on('connection', (socket) => {
     io.to(matchId).emit('review.left', { matchId, color });
   });
 
+  // --- 感想戦: 任意の盤面状態に設定（ナビゲーション/変化手順） ---
+  socket.on('review.setBoard', ({ matchId, board }) => {
+    const room = matchManager.getMatch(matchId);
+    if (!room?.review) return;
+    const isBlack = room.black.id === socket.id;
+    const isWhite = room.white.id === socket.id;
+    if (!isBlack && !isWhite) return;
+
+    const color = isBlack ? 'black' : 'white';
+    if (isBlack) room.review.blackBoard = board;
+    else room.review.whiteBoard = board;
+    // 両者にブロードキャストして相手側に反映
+    io.to(matchId).emit('review.snapshot', { matchId, color, board });
+  });
+
   // --- 切断 ---
   socket.on('disconnect', () => {
     const player = socket.data.player;

@@ -84,6 +84,7 @@ export interface UseSocketReturn {
   reviewOpponentBoard: GameState | null;
   enterReview: () => void;
   sendReviewMove: (move: Move) => void;
+  sendReviewBoard: (board: GameState) => void;
   reviewUndo: () => void;
   reviewReset: (position: 'initial' | 'final') => void;
   leaveReview: () => void;
@@ -389,6 +390,12 @@ export function useSocket(): UseSocketReturn {
     socket.emit("review.move", { matchId: match.matchId, move });
   }, [match]);
 
+  const sendReviewBoard = useCallback((board: GameState) => {
+    const socket = socketRef.current;
+    if (!socket || !match) return;
+    socket.emit("review.setBoard", { matchId: match.matchId, board });
+  }, [match]);
+
   const reviewUndo = useCallback(() => {
     const socket = socketRef.current;
     if (!socket || !match) return;
@@ -467,6 +474,6 @@ export function useSocket(): UseSocketReturn {
     spectating, spectateMatch, leaveSpectate,
     sendMove, sendResign, claimWin, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
-    enterReview, sendReviewMove, reviewUndo, reviewReset, leaveReview,
+    enterReview, sendReviewMove, sendReviewBoard, reviewUndo, reviewReset, leaveReview,
   };
 }

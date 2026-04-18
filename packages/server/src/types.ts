@@ -80,6 +80,7 @@ export interface ClientToServerEvents {
   'review.undo': (data: { matchId: string }) => void;
   'review.reset': (data: { matchId: string; position: 'initial' | 'final' }) => void;
   'review.leave': (data: { matchId: string }) => void;
+  'review.setBoard': (data: { matchId: string; board: GameState }) => void;
 }
 
 /** サーバー → クライアント */
