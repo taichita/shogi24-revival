@@ -12,6 +12,7 @@ import { HandPieces } from "./HandPieces";
 import { PromotionDialog } from "./PromotionDialog";
 import { MoveList } from "./MoveList";
 import { LobbySidebar } from "./LobbySidebar";
+import { KifCopyButton } from "./KifCopyButton";
 import {
   playMoveSound, playBeep, playEndSound,
   getBgmEnabled, setBgmEnabled,
@@ -31,6 +32,7 @@ interface Props {
   onMove: (move: Move) => void;
   onResign: () => void;
   onClaimWin?: () => Promise<string | null>;
+  onToggleConsider?: (active: boolean) => void;
   chatMessages: { sender: string; message: string; timestamp: number }[];
   onSendChat: (message: string) => void;
   myHandle: string | null;
@@ -60,7 +62,7 @@ function useViewportWidth() {
   return w;
 }
 
-export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, onSendChat, myHandle, lobbyPlayers, myId }: Props) {
+export function OnlineGame({ match, onMove, onResign, onClaimWin, onToggleConsider, chatMessages, onSendChat, myHandle, lobbyPlayers, myId }: Props) {
   const [selection, setSelection] = useState<SelectionState>({ type: "none" });
   const [promotionPending, setPromotionPending] = useState<PromotionChoice | null>(null);
   const [flipped, setFlipped] = useState(match.myColor === "white");
@@ -211,6 +213,10 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
   const botPlayer = botColor === "black" ? match.blackPlayer : match.whitePlayer;
   const topClock = match.clock?.[topColor];
   const botClock = match.clock?.[botColor];
+  const myClock = match.clock?.[myColor];
+  const hasConsiderRule = (myClock?.considerRemainMs ?? 0) > 0 || !!myClock?.considerActive;
+  const considerActive = !!myClock?.considerActive;
+  const considerRemainSec = Math.max(0, Math.ceil((myClock?.considerRemainMs ?? 0) / 1000));
 
   // ========================================================================
   // モバイル版レイアウト（viewport < 700px）
@@ -278,8 +284,24 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
             style={mobileBtn("#e7e5e4", "#1c1917")}>
             💬{chatMessages.length > 0 ? chatMessages.length : ""}
           </button>
+          <KifCopyButton compact
+            moves={game.moves}
+            blackName={match.blackPlayer.handle}
+            whiteName={match.whitePlayer.handle}
+            result={match.result}
+            timePreset={match.timePreset?.name}
+          />
           {!match.result && (
             <>
+              {hasConsiderRule && onToggleConsider && (
+                <button
+                  onClick={() => onToggleConsider(!considerActive)}
+                  disabled={!isMyTurn || considerRemainSec === 0}
+                  style={mobileBtn(considerActive ? "#fee2e2" : "#fef3c7", considerActive ? "#991b1b" : "#92400e")}
+                  title="秒読み中に追加で考慮する時間（着手で解除）">
+                  考{considerActive ? "⏸" : "▶"}{considerRemainSec}s
+                </button>
+              )}
               <button onClick={onResign} style={mobileBtn("#44403c", "#fff")}>投了</button>
               {onClaimWin && (
                 <button onClick={handleClaimWin}
@@ -402,6 +424,30 @@ export function OnlineGame({ match, onMove, onResign, onClaimWin, chatMessages, 
                 <option value={3}>BGM 3</option>
               </select>
             )}
+            <KifCopyButton
+              moves={game.moves}
+              blackName={match.blackPlayer.handle}
+              whiteName={match.whitePlayer.handle}
+              result={match.result}
+              timePreset={match.timePreset?.name}
+              style={{ padding: "3px 8px", fontSize: 11 }}
+            />
+            {!match.result && hasConsiderRule && onToggleConsider && (
+              <button
+                onClick={() => onToggleConsider(!considerActive)}
+                disabled={!isMyTurn || considerRemainSec === 0}
+                title="秒読み中の追加考慮時間（着手で解除・残り時間は次局面以降持ち越し）"
+                style={{
+                  padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: "bold",
+                  backgroundColor: considerActive ? "#fee2e2" : "#fef3c7",
+                  color: considerActive ? "#991b1b" : "#92400e",
+                  border: considerActive ? "1px solid #dc2626" : "1px solid #d97706",
+                  cursor: (!isMyTurn || considerRemainSec === 0) ? "not-allowed" : "pointer",
+                  opacity: (!isMyTurn || considerRemainSec === 0) ? 0.6 : 1,
+                }}>
+                考慮{considerActive ? "⏸" : "▶"} {considerRemainSec}秒
+              </button>
+            )}
             {!match.result && (
               <>
                 <button onClick={onResign}
@@ -512,11 +558,12 @@ function mobileBtn(bg: string, fg: string): React.CSSProperties {
 
 function PlayerBar({ handle, rating, clock, isActive, color, isGuest }: {
   handle: string; rating: number;
-  clock?: { remainMs: number; inByoyomi: boolean };
+  clock?: { remainMs: number; inByoyomi: boolean; considerRemainMs?: number; considerActive?: boolean };
   isActive: boolean; color: Color; isGuest?: boolean;
 }) {
   const symbol = color === "black" ? "☗" : "☖";
   const low = clock && clock.remainMs <= 10000;
+  const consider = (clock?.considerRemainMs ?? 0) > 0 || clock?.considerActive;
   return (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -536,6 +583,17 @@ function PlayerBar({ handle, rating, clock, isActive, color, isGuest }: {
         <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: "bold", color: low ? "#dc2626" : "#1c1917" }}>
           {formatTime(clock.remainMs)}
           {clock.inByoyomi && <span style={{ fontSize: 10, marginLeft: 3, color: "#78716c" }}>秒読み</span>}
+          {consider && (
+            <span style={{
+              fontSize: 10, marginLeft: 4,
+              padding: "1px 4px", borderRadius: 3,
+              backgroundColor: clock!.considerActive ? "#fee2e2" : "#fef3c7",
+              color: clock!.considerActive ? "#991b1b" : "#92400e",
+              fontWeight: "bold",
+            }}>
+              考{Math.ceil((clock!.considerRemainMs ?? 0) / 1000)}
+            </span>
+          )}
         </span>
       )}
     </div>
@@ -544,11 +602,12 @@ function PlayerBar({ handle, rating, clock, isActive, color, isGuest }: {
 
 function MobilePlayerBar({ handle, rating, clock, isActive, color, width, isGuest }: {
   handle: string; rating: number;
-  clock?: { remainMs: number; inByoyomi: boolean };
+  clock?: { remainMs: number; inByoyomi: boolean; considerRemainMs?: number; considerActive?: boolean };
   isActive: boolean; color: Color; width: number; isGuest?: boolean;
 }) {
   const symbol = color === "black" ? "☗" : "☖";
   const low = clock && clock.remainMs <= 10000;
+  const consider = (clock?.considerRemainMs ?? 0) > 0 || clock?.considerActive;
   return (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -568,6 +627,16 @@ function MobilePlayerBar({ handle, rating, clock, isActive, color, width, isGues
         <span style={{ fontFamily: "monospace", fontSize: 14, fontWeight: "bold", color: low ? "#dc2626" : "#1c1917", marginLeft: 6, flexShrink: 0 }}>
           {formatTime(clock.remainMs)}
           {clock.inByoyomi && <span style={{ fontSize: 9, marginLeft: 2, color: "#78716c" }}>秒</span>}
+          {consider && (
+            <span style={{
+              fontSize: 9, marginLeft: 3,
+              padding: "0 3px", borderRadius: 2,
+              backgroundColor: clock!.considerActive ? "#fee2e2" : "#fef3c7",
+              color: clock!.considerActive ? "#991b1b" : "#92400e",
+            }}>
+              考{Math.ceil((clock!.considerRemainMs ?? 0) / 1000)}
+            </span>
+          )}
         </span>
       )}
     </div>

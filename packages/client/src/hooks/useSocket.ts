@@ -13,11 +13,19 @@ interface TimePreset {
   name: string;
   mainTimeMs: number;
   byoyomiMs: number;
+  considerMs?: number;
+}
+
+export interface ClockSide {
+  remainMs: number;
+  inByoyomi: boolean;
+  considerRemainMs: number;
+  considerActive: boolean;
 }
 
 interface ClockState {
-  black: { remainMs: number; inByoyomi: boolean };
-  white: { remainMs: number; inByoyomi: boolean };
+  black: ClockSide;
+  white: ClockSide;
 }
 
 export interface LobbyPlayer {
@@ -71,6 +79,7 @@ export interface UseSocketReturn {
   sendMove: (move: Move) => void;
   sendResign: () => void;
   claimWin: () => Promise<string | null>;
+  toggleConsider: (active: boolean) => void;
   sendChat: (message: string) => void;
   backToLobby: () => void;
   spectating: boolean;
@@ -372,6 +381,12 @@ export function useSocket(): UseSocketReturn {
     });
   }, [match]);
 
+  const toggleConsider = useCallback((active: boolean) => {
+    const socket = socketRef.current;
+    if (!socket || !match) return;
+    socket.emit("match.toggleConsider", { matchId: match.matchId, active });
+  }, [match]);
+
   const sendChat = useCallback((message: string) => {
     const socket = socketRef.current;
     if (!socket || !match) return;
@@ -472,7 +487,7 @@ export function useSocket(): UseSocketReturn {
     lobbyPlayers, challenges, sentChallenges, match, chatMessages,
     login, setHandleName, quickstart, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge,
     spectating, spectateMatch, leaveSpectate,
-    sendMove, sendResign, claimWin, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
+    sendMove, sendResign, claimWin, toggleConsider, sendChat, backToLobby, setLobbyStatus, setPreferredTime,
     reviewMode, reviewMyBoard, reviewOpponentBoard,
     enterReview, sendReviewMove, sendReviewBoard, reviewUndo, reviewReset, leaveReview,
   };

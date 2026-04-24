@@ -1,26 +1,29 @@
 import type { Color } from '@shogi24/engine';
-import type { ClockState, TimePreset } from './types.js';
+import type { ClockState, ClockSide, TimePreset } from './types.js';
+
+function makeSide(preset: TimePreset): ClockSide {
+  const startByoyomi = preset.mainTimeMs === 0;
+  return {
+    remainMs: startByoyomi ? preset.byoyomiMs : preset.mainTimeMs,
+    inByoyomi: startByoyomi,
+    considerRemainMs: preset.considerMs ?? 0,
+    considerActive: false,
+  };
+}
 
 /** 初期時計を作成 */
 export function createClock(preset: TimePreset): ClockState {
-  // 早指し2のように持ち時間0の場合は最初から秒読み
-  const startByoyomi = preset.mainTimeMs === 0;
   return {
-    black: {
-      remainMs: startByoyomi ? preset.byoyomiMs : preset.mainTimeMs,
-      inByoyomi: startByoyomi,
-    },
-    white: {
-      remainMs: startByoyomi ? preset.byoyomiMs : preset.mainTimeMs,
-      inByoyomi: startByoyomi,
-    },
+    black: makeSide(preset),
+    white: makeSide(preset),
   };
 }
 
 /**
  * 着手後の時計更新。
- * - 持ち時間中: elapsedを消費。0以下になったら即秒読み移行
+ * - 考慮時間発動中: 考慮時間を消費し、尽きたら秒読みから消費へフォールバック
  * - 秒読み中: リセットありなら秒読みリセット、なしなら消費し続ける
+ * - 持ち時間中: elapsedを消費。0以下になったら即秒読み移行
  * - 秒読み切れ → timeout: true
  */
 export function tickClock(
@@ -29,13 +32,27 @@ export function tickClock(
   elapsedMs: number,
   preset: TimePreset,
 ): { clock: ClockState; timeout: boolean } {
-  const side = { ...clock[color] };
+  const side: ClockSide = { ...clock[color] };
+
+  if (side.considerActive && side.considerRemainMs > 0) {
+    // 考慮時間を消費
+    const used = Math.min(elapsedMs, side.considerRemainMs);
+    side.considerRemainMs -= used;
+    elapsedMs -= used;
+    if (side.considerRemainMs <= 0) {
+      side.considerRemainMs = 0;
+      side.considerActive = false;
+    }
+  }
+
+  if (elapsedMs <= 0) {
+    return { clock: { ...clock, [color]: side } as ClockState, timeout: false };
+  }
 
   if (side.inByoyomi) {
     // 秒読み中
     side.remainMs -= elapsedMs;
     if (side.remainMs <= 0) {
-      // 秒読み切れ → 負け
       side.remainMs = 0;
       return {
         clock: { ...clock, [color]: side } as ClockState,
@@ -50,12 +67,10 @@ export function tickClock(
     // 持ち時間消費
     side.remainMs -= elapsedMs;
     if (side.remainMs <= 0) {
-      // 持ち時間切れ → 即秒読みに移行
       const overflow = -side.remainMs;
       side.inByoyomi = true;
 
       if (overflow >= preset.byoyomiMs) {
-        // 秒読みすら超過 → 即負け
         side.remainMs = 0;
         return {
           clock: { ...clock, [color]: side } as ClockState,
@@ -63,15 +78,16 @@ export function tickClock(
         };
       }
 
-      // 秒読み開始（溢れ分を差し引く）
       side.remainMs = preset.byoyomiMs - overflow;
 
-      // 着手完了なのでリセット判定
       if (preset.byoyomiResets) {
         side.remainMs = preset.byoyomiMs;
       }
     }
   }
+
+  // 着手が完了したので考慮時間発動は解除（次局面でまた発動できる）
+  side.considerActive = false;
 
   return {
     clock: { ...clock, [color]: side } as ClockState,

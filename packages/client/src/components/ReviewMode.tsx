@@ -9,6 +9,7 @@ import {
 import { ShogiBoard } from "./ShogiBoard";
 import { HandPieces } from "./HandPieces";
 import { PromotionDialog } from "./PromotionDialog";
+import { KifCopyButton } from "./KifCopyButton";
 import type { ChatMessage } from "./ChatPanel";
 
 type SelectionState =
@@ -69,9 +70,12 @@ export function ReviewMode({
   const allMoves = useMemo(() => finalGame?.moves ?? myBoard?.moves ?? [], [finalGame, myBoard]);
   const totalMoves = allMoves.length;
 
-  // 自分盤の現在手数 / 変化手順
+  // 自分盤の現在手数（ベース手順、変化手順の分岐元）
   const [currentMoveIndex, setCurrentMoveIndex] = useState(totalMoves - 1);
-  const [myExtraBoard, setMyExtraBoard] = useState<GameState | null>(null);
+  // 変化手順：分岐元局面以降に自分で指した手
+  const [variation, setVariation] = useState<Move[]>([]);
+  // 変化手順の現在インデックス（-1 = 分岐元そのもの / 0..variation.length-1 = その手目まで進んだ状態）
+  const [variationIndex, setVariationIndex] = useState(-1);
 
   const [view, setView] = useState<ViewMode>("mine");
   const [selection, setSelection] = useState<SelectionState>({ type: "none" });
@@ -88,10 +92,14 @@ export function ReviewMode({
 
   // 自分盤の現局面を計算
   const myDisplayBoard = useMemo(() => {
-    if (myExtraBoard) return myExtraBoard;
-    if (currentMoveIndex < 0) return createGame();
-    return replayToMove(allMoves, currentMoveIndex);
-  }, [allMoves, currentMoveIndex, myExtraBoard]);
+    let state = currentMoveIndex < 0 ? createGame() : replayToMove(allMoves, currentMoveIndex);
+    for (let i = 0; i <= variationIndex && i < variation.length; i++) {
+      try { state = engineMakeMove(state, variation[i]); } catch { break; }
+    }
+    return state;
+  }, [allMoves, currentMoveIndex, variation, variationIndex]);
+
+  const inVariation = variation.length > 0;
 
   // 相手盤: opponentBoardがなければfinalGameをfallback
   const oppDisplayBoard = opponentBoard ?? finalGame ?? myDisplayBoard;
@@ -113,37 +121,72 @@ export function ReviewMode({
     });
   }, [allMoves]);
 
-  // ナビゲーション
+  // ベース手順へジャンプ（変化は全消去）
   const goToMove = useCallback((index: number) => {
     setCurrentMoveIndex(Math.max(-1, Math.min(totalMoves - 1, index)));
-    setMyExtraBoard(null);
+    setVariation([]);
+    setVariationIndex(-1);
     setSelection({ type: "none" });
     setPromotionPending(null);
   }, [totalMoves]);
 
+  // 変化手順を削除（ベース手順の現在位置に戻る）
+  const clearVariation = useCallback(() => {
+    setVariation([]);
+    setVariationIndex(-1);
+    setSelection({ type: "none" });
+    setPromotionPending(null);
+  }, []);
+
+  // 一括移動ボタン: 変化手順があれば削除してベースで移動
   const goToStart = () => goToMove(-1);
   const goBack10 = () => goToMove(currentMoveIndex - 10);
+  const goForward10 = () => goToMove(currentMoveIndex + 10);
+  const goToEnd = () => goToMove(totalMoves - 1);
+
+  // 1手戻る: 変化手順内ならvariationIndexを戻す、そうでなければベース手順で1手戻る
   const goBack1 = () => {
-    if (myExtraBoard) {
-      setMyExtraBoard(null);
+    if (inVariation) {
+      if (variationIndex >= 0) {
+        setVariationIndex(variationIndex - 1);
+        setSelection({ type: "none" });
+        setPromotionPending(null);
+      } else {
+        // 変化の分岐元まで戻ったら、変化自体をクリアしてさらにベース手順を1手戻る
+        clearVariation();
+      }
     } else {
       goToMove(currentMoveIndex - 1);
     }
   };
-  const goForward1 = () => goToMove(currentMoveIndex + 1);
-  const goForward10 = () => goToMove(currentMoveIndex + 10);
-  const goToEnd = () => goToMove(totalMoves - 1);
 
-  // 自分盤で着手（変化手順）
+  // 1手進む: 変化手順内で未到達の手があれば進める、ベース手順ならベースで1手進む
+  const goForward1 = () => {
+    if (inVariation) {
+      if (variationIndex < variation.length - 1) {
+        setVariationIndex(variationIndex + 1);
+        setSelection({ type: "none" });
+        setPromotionPending(null);
+      }
+      // 変化手順の末尾にいる場合は進めない（新しい手を指すことで伸ばす）
+    } else {
+      goToMove(currentMoveIndex + 1);
+    }
+  };
+
+  // 自分盤で着手（変化手順を伸ばす、または分岐）
   const executeMove = useCallback((move: Move) => {
     if (!isEditable || !myDisplayBoard) return;
     try {
-      const newBoard = engineMakeMove(myDisplayBoard, move);
-      setMyExtraBoard(newBoard);
+      engineMakeMove(myDisplayBoard, move); // 合法性チェック
+      // variationIndex より後ろは捨てて、新しい手を末尾に追加
+      const newVariation = [...variation.slice(0, variationIndex + 1), move];
+      setVariation(newVariation);
+      setVariationIndex(newVariation.length - 1);
     } catch { /* invalid */ }
     setSelection({ type: "none" });
     setPromotionPending(null);
-  }, [isEditable, myDisplayBoard]);
+  }, [isEditable, myDisplayBoard, variation, variationIndex]);
 
   const selectCell = useCallback((pos: Pos) => {
     if (!isEditable || !myDisplayBoard || promotionPending) return;
@@ -200,7 +243,9 @@ export function ReviewMode({
   const botColor: Color = flipped ? "white" : "black";
 
   const statusText = view === "mine"
-    ? (myExtraBoard ? "自分盤（変化手順）" : `自分盤（${currentMoveIndex + 1}手目 / ${totalMoves}手）`)
+    ? (inVariation
+        ? `自分盤（変化手順 ${variationIndex + 1}/${variation.length}手 — 分岐元: ${currentMoveIndex + 1}手目）`
+        : `自分盤（${currentMoveIndex + 1}手目 / ${totalMoves}手）`)
     : (opponentBoard ? "相手盤（相手の検討中）" : "相手盤（最終局面）");
 
   // ========================================================================
@@ -277,14 +322,20 @@ export function ReviewMode({
 
         {/* 操作ボタン */}
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", width: mobileBoardW }}>
-          {myExtraBoard && view === "mine" && (
-            <button onClick={() => setMyExtraBoard(null)} style={mobileBtn("#fef3c7", "#b45309")}>
-              変化リセット
+          {inVariation && view === "mine" && (
+            <button onClick={clearVariation} style={mobileBtn("#fef3c7", "#b45309")}>
+              変化削除
             </button>
           )}
           <button onClick={() => setChatOpenMobile(v => !v)} style={mobileBtn("#e7e5e4", "#1c1917")}>
             💬{chatMessages.length > 0 ? chatMessages.length : ""}
           </button>
+          <KifCopyButton compact
+            moves={allMoves}
+            blackName={blackHandle}
+            whiteName={whiteHandle}
+            result={finalGame?.result ?? null}
+          />
           <button onClick={onLeave} style={mobileBtn("#e7e5e4", "#1c1917")}>終了</button>
           <button onClick={onBackToLobby} style={mobileBtn("#44403c", "#fff")}>ロビー</button>
         </div>
@@ -299,15 +350,15 @@ export function ReviewMode({
             <span onClick={() => goToMove(-1)}
               style={{
                 marginRight: 8, cursor: "pointer",
-                fontWeight: currentMoveIndex === -1 && !myExtraBoard ? "bold" : "normal",
-                color: currentMoveIndex === -1 && !myExtraBoard ? "#b45309" : "#57534e",
+                fontWeight: currentMoveIndex === -1 && !inVariation ? "bold" : "normal",
+                color: currentMoveIndex === -1 && !inVariation ? "#b45309" : "#57534e",
               }}>0.開始</span>
             {moveHistory.map((m, i) => (
               <span key={i} onClick={() => goToMove(i)}
                 style={{
                   marginRight: 8, cursor: "pointer",
-                  fontWeight: i === currentMoveIndex && !myExtraBoard ? "bold" : "normal",
-                  color: i === currentMoveIndex && !myExtraBoard ? "#b45309" : "#57534e",
+                  fontWeight: i === currentMoveIndex && !inVariation ? "bold" : "normal",
+                  color: i === currentMoveIndex && !inVariation ? "#b45309" : "#57534e",
                 }}>{m}</span>
             ))}
           </div>
@@ -384,8 +435,8 @@ export function ReviewMode({
             <div onClick={() => goToMove(-1)}
               style={{
                 padding: "2px 4px", borderRadius: 4, fontSize: 13, cursor: "pointer",
-                backgroundColor: currentMoveIndex === -1 && !myExtraBoard ? "#fef3c7" : "transparent",
-                fontWeight: currentMoveIndex === -1 && !myExtraBoard ? "bold" : "normal",
+                backgroundColor: currentMoveIndex === -1 && !inVariation ? "#fef3c7" : "transparent",
+                fontWeight: currentMoveIndex === -1 && !inVariation ? "bold" : "normal",
               }}>
               0. 開始局面
             </div>
@@ -393,8 +444,8 @@ export function ReviewMode({
               <div key={i} onClick={() => goToMove(i)}
                 style={{
                   padding: "2px 4px", borderRadius: 4, fontSize: 13, fontFamily: "monospace", cursor: "pointer",
-                  backgroundColor: i === currentMoveIndex && !myExtraBoard ? "#fef3c7" : "transparent",
-                  fontWeight: i === currentMoveIndex && !myExtraBoard ? "bold" : "normal",
+                  backgroundColor: i === currentMoveIndex && !inVariation ? "#fef3c7" : "transparent",
+                  fontWeight: i === currentMoveIndex && !inVariation ? "bold" : "normal",
                 }}>
                 {m}
               </div>
@@ -503,9 +554,15 @@ export function ReviewMode({
           }}>
             {displayBoard.turn === "black" ? "☗先手番" : "☖後手番"}
           </div>
-          {myExtraBoard && view === "mine" && (
-            <button onClick={() => setMyExtraBoard(null)} style={btnStyle}>
-              変化リセット
+          <KifCopyButton
+            moves={allMoves}
+            blackName={blackHandle}
+            whiteName={whiteHandle}
+            result={finalGame?.result ?? null}
+          />
+          {inVariation && view === "mine" && (
+            <button onClick={clearVariation} style={btnStyle}>
+              変化削除
             </button>
           )}
           <button onClick={onLeave} style={btnStyle}>感想戦を終了</button>

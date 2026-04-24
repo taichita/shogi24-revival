@@ -6,19 +6,28 @@ export interface TimePreset {
   mainTimeMs: number;    // 持ち時間 (ms)
   byoyomiMs: number;     // 秒読み (ms per move)
   byoyomiResets: boolean; // true=秒読みリセットあり(早指し1), false=切れたら負け(早指し2)
+  considerMs?: number;   // 追加の考慮時間（一局トータル、秒読み中にトグルで発動）
 }
 
 export const TIME_PRESETS: Record<string, TimePreset> = {
   'normal':  { name: '15分+60秒',   mainTimeMs: 15 * 60_000, byoyomiMs: 60_000, byoyomiResets: true },
   'rapid1':  { name: '早指し1',     mainTimeMs: 60_000,      byoyomiMs: 30_000, byoyomiResets: true },
-  'rapid2':  { name: '早指し2',     mainTimeMs: 0,           byoyomiMs: 30_000, byoyomiResets: true },
+  'rapid2':  { name: '早指し2',     mainTimeMs: 0,           byoyomiMs: 30_000, byoyomiResets: true, considerMs: 60_000 },
   'long':    { name: '長考30分',    mainTimeMs: 30 * 60_000, byoyomiMs: 60_000, byoyomiResets: true },
 };
 
 /** 対局時計の状態 */
+export interface ClockSide {
+  remainMs: number;
+  inByoyomi: boolean;
+  /** 残り考慮時間（ms）。0固定なら考慮時間ルール無し。 */
+  considerRemainMs: number;
+  /** いま考慮時間を発動中か */
+  considerActive: boolean;
+}
 export interface ClockState {
-  black: { remainMs: number; inByoyomi: boolean };
-  white: { remainMs: number; inByoyomi: boolean };
+  black: ClockSide;
+  white: ClockSide;
 }
 
 /** サーバー上のプレイヤー */
@@ -74,6 +83,7 @@ export interface ClientToServerEvents {
   'match.spectate': (data: { matchId: string }, cb: (res: { ok: boolean; error?: string }) => void) => void;
   'match.spectate.leave': (data: { matchId: string }) => void;
   'match.claimWin': (data: { matchId: string }, cb: (res: { ok: boolean; error?: string }) => void) => void;
+  'match.toggleConsider': (data: { matchId: string; active: boolean }, cb?: (res: { ok: boolean; error?: string }) => void) => void;
   'chat.send': (data: { matchId: string; message: string }) => void;
   'review.enter': (data: { matchId: string }) => void;
   'review.move': (data: { matchId: string; move: Move }) => void;

@@ -71,8 +71,20 @@ export class MatchManager {
     // 時計更新: tickタイマーがリアルタイムで減算済み。
     // ここでは最後のtickからの端数を反映し、秒読みリセットを行う
     const now = Date.now();
-    const elapsed = now - room.lastMoveTime;
+    let elapsed = now - room.lastMoveTime;
     const side = room.clock[color as 'black' | 'white'];
+
+    // 考慮時間発動中は考慮時間から優先消費
+    if (side.considerActive && side.considerRemainMs > 0) {
+      const used = Math.min(elapsed, side.considerRemainMs);
+      side.considerRemainMs -= used;
+      elapsed -= used;
+      if (side.considerRemainMs <= 0) {
+        side.considerRemainMs = 0;
+        side.considerActive = false;
+      }
+    }
+
     side.remainMs -= elapsed;
 
     if (side.remainMs <= 0) {
@@ -101,6 +113,9 @@ export class MatchManager {
     if (side.inByoyomi && room.timePreset.byoyomiResets) {
       side.remainMs = room.timePreset.byoyomiMs;
     }
+
+    // 着手完了 → 考慮時間発動は解除（残りは次局面で再発動できる）
+    side.considerActive = false;
 
     room.lastMoveTime = now;
 
@@ -152,6 +167,43 @@ export class MatchManager {
     room.game = { ...room.game, result };
     this.clearTimer(room);
     return { matchId, result };
+  }
+
+  /** 考慮時間の発動切替 */
+  toggleConsider(
+    matchId: string,
+    playerId: string,
+    active: boolean,
+  ): { ok: boolean; error?: string } {
+    const room = this.matches.get(matchId);
+    if (!room) return { ok: false, error: '対局が見つかりません' };
+    if (room.game.result) return { ok: false, error: '対局は既に終了しています' };
+
+    const color = this.getPlayerColor(room, playerId);
+    if (!color) return { ok: false, error: 'この対局のプレイヤーではありません' };
+    if (room.game.turn !== color) return { ok: false, error: '手番ではありません' };
+
+    const side = room.clock[color];
+    if ((side.considerRemainMs ?? 0) <= 0) {
+      return { ok: false, error: '考慮時間は残っていません' };
+    }
+
+    // 発動/解除のタイミングで現在のtick端数を反映
+    const now = Date.now();
+    const elapsed = now - room.lastMoveTime;
+    if (elapsed > 0) {
+      if (side.considerActive && side.considerRemainMs > 0) {
+        const used = Math.min(elapsed, side.considerRemainMs);
+        side.considerRemainMs -= used;
+        if (side.considerRemainMs <= 0) side.considerRemainMs = 0;
+      } else {
+        side.remainMs -= elapsed;
+      }
+      room.lastMoveTime = now;
+    }
+
+    side.considerActive = active && side.considerRemainMs > 0;
+    return { ok: true };
   }
 
   /** 対局のクリーンアップ */

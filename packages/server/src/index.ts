@@ -197,7 +197,19 @@ function startMatch(blackPlayer: Player, whitePlayer: Player, presetKey: string)
 
     const color = room.game.turn;
     const side = room.clock[color];
-    side.remainMs -= elapsed;
+
+    // 考慮時間発動中は考慮時間から優先消費
+    let rem = elapsed;
+    if (side.considerActive && side.considerRemainMs > 0) {
+      const used = Math.min(rem, side.considerRemainMs);
+      side.considerRemainMs -= used;
+      rem -= used;
+      if (side.considerRemainMs <= 0) {
+        side.considerRemainMs = 0;
+        side.considerActive = false;
+      }
+    }
+    side.remainMs -= rem;
 
     if (side.remainMs <= 0) {
       if (side.inByoyomi) {
@@ -250,11 +262,16 @@ async function handleMatchEnd(matchId: string, result: { winner: string | null; 
   // ゲストが絡む対局はレート変動なし（対局記録のみ残す）
   const hasGuest = room.black.isGuest || room.white.isGuest;
 
+  // 対局時のレートをスナップショット（Player 参照は socket.data.player と共有しており、
+  // 後段で書き換わるため、saveMatch 用にここで値を固定する）
+  const preBlackR = room.black.rating;
+  const preWhiteR = room.white.rating;
+
   // 引き分け以外ならレート更新
   if (result.winner) {
     const winnerIsBlack = result.winner === 'black';
-    const winnerR = winnerIsBlack ? room.black.rating : room.white.rating;
-    const loserR = winnerIsBlack ? room.white.rating : room.black.rating;
+    const winnerR = winnerIsBlack ? preBlackR : preWhiteR;
+    const loserR = winnerIsBlack ? preWhiteR : preBlackR;
     const rr = apply24Rating(winnerR, loserR);
 
     if (rr.rated && !hasGuest) {
@@ -283,12 +300,13 @@ async function handleMatchEnd(matchId: string, result: { winner: string | null; 
     }
 
     // 対局記録は常に保存（ゲスト参加時もレート変動0で記録、棋譜はJSON保存）
+    // blackRating/whiteRating は対局開始時の値（pre-match）を保存する
     const winnerUserId = winnerIsBlack ? room.black.userId : room.white.userId;
     await saveMatch({
       id: matchId,
       blackId: room.black.userId, whiteId: room.white.userId,
       winnerId: winnerUserId, result: result.reason,
-      blackRating: room.black.rating, whiteRating: room.white.rating,
+      blackRating: preBlackR, whiteRating: preWhiteR,
       ratingDelta: (rr.rated && !hasGuest) ? rr.exchanged : 0,
       timePreset: room.timePreset.name,
       moves: room.game.moveCount,
@@ -588,7 +606,10 @@ io.on('connection', (socket) => {
     const result = matchManager.resign(matchId, socket.id);
     if (result) {
       const room = matchManager.getMatch(matchId);
-      const clock = room?.clock ?? { black: { remainMs: 0, inByoyomi: false }, white: { remainMs: 0, inByoyomi: false } };
+      const clock = room?.clock ?? {
+        black: { remainMs: 0, inByoyomi: false, considerRemainMs: 0, considerActive: false },
+        white: { remainMs: 0, inByoyomi: false, considerRemainMs: 0, considerActive: false },
+      };
       io.to(matchId).emit('match.result', { matchId, result, clock });
       handleMatchEnd(matchId, result);
     }
@@ -620,6 +641,16 @@ io.on('connection', (socket) => {
     handleMatchEnd(matchId, result);
     cb({ ok: true });
     console.log(`[claimWin] ${socket.data.player?.handle} won by opponent disconnect (${matchId})`);
+  });
+
+  // --- 考慮時間トグル（早指し2などで使用） ---
+  socket.on('match.toggleConsider', ({ matchId, active }, cb) => {
+    const res = matchManager.toggleConsider(matchId, socket.id, !!active);
+    if (res.ok) {
+      const room = matchManager.getMatch(matchId);
+      if (room) io.to(matchId).emit('match.clock', { matchId, clock: room.clock });
+    }
+    if (cb) cb(res);
   });
 
   // --- 観戦 ---
@@ -787,7 +818,10 @@ io.on('connection', (socket) => {
     const disc = matchManager.handleDisconnect(socket.id);
     if (disc) {
       const room = matchManager.getMatch(disc.matchId);
-      const clock = room?.clock ?? { black: { remainMs: 0, inByoyomi: false }, white: { remainMs: 0, inByoyomi: false } };
+      const clock = room?.clock ?? {
+        black: { remainMs: 0, inByoyomi: false, considerRemainMs: 0, considerActive: false },
+        white: { remainMs: 0, inByoyomi: false, considerRemainMs: 0, considerActive: false },
+      };
       io.to(disc.matchId).emit('match.result', { matchId: disc.matchId, result: disc.result, clock });
       handleMatchEnd(disc.matchId, disc.result);
     } else {
